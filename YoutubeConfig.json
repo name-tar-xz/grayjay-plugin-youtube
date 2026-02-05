@@ -17,7 +17,7 @@
 	"packages": ["Http", "Utilities", "DOMParser"],
 	"packagesOptional": ["Browser"],
 
-	"subscriptionRateLimit": 140,
+	"subscriptionRateLimit": 9999,
 
 	"reduceFunctionsInLimitedVersion": true,
 	
