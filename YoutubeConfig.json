@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://github.com/name-tar-xz/grayjay-plugin-youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 321,
+	"version": 322,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -439,6 +439,9 @@
 
 
 	"changelog": {
+		"322": [
+			"Fix: Possible initial UMP stream fetching"
+		],
 		"321": [
 			"Fix: Possible fix for cipher issue [4e51e895]"
 		],
