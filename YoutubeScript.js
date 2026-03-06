@@ -23,7 +23,8 @@ const URL_PLAYLIST = "https://youtube.com/playlist?list=";
 const URL_PLAYLISTS_M = "https://m.youtube.com/feed/library";
 const URL_HISTORY_M = "https://m.youtube.com/feed/history";
 
-const URL_SOLVER = "https://solver.grayjay.app/"
+const URL_SOLVER = "https://solver.grayjay.app/";
+const URL_SOLUTIONS = "https://solutions.grayjay.app/";
 
 const URL_VERIFY_AGE = URL_BASE + "/youtubei/v1/verify_age";
 
@@ -10857,6 +10858,18 @@ function findNDecryptorFunction(jsUrl, code, codeRaw) {
 }
 const remoteSolutions = {}
 const TOKEN_SOLVER = "2550039d-5242-47d4-95de-4448971db523";
+const LBID_SOLVER = "" + Math.floor(Math.random() * 1000001);
+
+function getSolverHeaders() {
+	return {
+		"TOKEN": TOKEN_SOLVER,
+		"LBID": LBID_SOLVER,
+		"Content-Type": "application/json",
+		"GJ_PLATFORM": bridge.buildPlatform,
+		"GJ_VERSION": "" + bridge.buildVersion,
+		"GJ_VERSION_YT": "" + config.version,
+	};
+}
 
 function rewriteRemoteSolution(solution) {
 	let paras = solution.parameters.map(x=>x);
@@ -10890,8 +10903,6 @@ function findRemoteSolution(jsUrl, codeRaw) {
 	if(solution.status == 99) {
 		log("Remote solver starting new job");
 		solution = startRemoteSolution(md5Hash, jsUrl, codeRaw);
-		if(solution.status == 0)
-			remoteSolutions[md5Hash] = solution;
 	}
 
 	switch(solution.status) {
@@ -10910,11 +10921,11 @@ function findRemoteSolution(jsUrl, codeRaw) {
 				let newSolution = getRemoteSolution(md5Hash);
 				switch(newSolution.status) {
 					case 1:
-						remoteSolutions[md5Hash] = solution;
+						remoteSolutions[md5Hash] = newSolution;
 						return newSolution;
 					case 2:
 						remoteSolutions[md5Hash] = undefined;
-						throw new ScriptException("Failed remote solver [" + jsUrlHash + "]:" + error);
+						throw new ScriptException("Failed remote solver [" + jsUrlHash + "]:" + newSolution.error);
 					default:
 						continue;
 				}
@@ -10926,38 +10937,50 @@ function findRemoteSolution(jsUrl, codeRaw) {
 			throw new ScriptException("Failed remote solver invalid status code [" + jsUrlHash + "]");
 	}
 }
+
 function startRemoteSolution(md5Hash, jsUrl, codeRaw) {
 	const jsUrlHashMatch = (/\/s\/player\/([a-zA-Z0-9]+)\//g).exec(jsUrl);
 	const jsUrlHash = (jsUrlHashMatch) ? jsUrlHashMatch[1] : jsUrl;
 
-	if(!!remoteSolutions[md5Hash])
+	if(!!remoteSolutions[md5Hash] && remoteSolutions[md5Hash].status !== 0)
 		return remoteSolutions[md5Hash];
 	
 	const jobResponse = http.POST(URL_SOLVER + "jobs", JSON.stringify({
 		playerJsUrl: URL_BASE + jsUrl,
 		body: codeRaw
-	}), { "TOKEN": TOKEN_SOLVER,
-		"Content-Type": "application/json",
-		"GJ_PLATFORM": bridge.buildPlatform,
-		"GJ_VERSION": "" + bridge.buildVersion,
-		"GJ_VERSION_YT": "" + config.version, }, false);
+	}), getSolverHeaders(), false);
 
 	if(jobResponse && jobResponse.isOk)
 		return JSON.parse(jobResponse.body);
 	throw new ScriptException("Failed to start remote solver [" + jsUrlHash + "] (" + jobResponse?.code + ")");
 }
+function getFastCachedSolution(md5Hash) {
+	const response = http.GET(URL_SOLUTIONS + md5Hash, {}, false);
+	if(response && response.isOk) {
+		const solution = JSON.parse(response.body);
+		if(solution && solution.status === 1) {
+			remoteSolutions[md5Hash] = solution;
+			return solution;
+		}
+	}
+
+	return null;
+}
 function getRemoteSolution(md5Hash) {
-	if(!!remoteSolutions[md5Hash])
+	if(!!remoteSolutions[md5Hash] && remoteSolutions[md5Hash].status !== 0)
 		return remoteSolutions[md5Hash];
 	
-	const solutionResponse = http.GET(URL_SOLVER + "jobs/" + md5Hash, { "TOKEN": TOKEN_SOLVER,
-		"Content-Type": "application/json",
-		"GJ_PLATFORM": bridge.buildPlatform,
-		"GJ_VERSION": "" + bridge.buildVersion,
-		"GJ_VERSION_YT": "" + config.version,
-	 }, false);
-	if(solutionResponse && solutionResponse.isOk)
-		return JSON.parse(solutionResponse.body);
+	const fastSolution = getFastCachedSolution(md5Hash);
+	if(fastSolution)
+		return fastSolution;
+
+	const solutionResponse = http.GET(URL_SOLVER + "jobs/" + md5Hash, getSolverHeaders(), false);
+	if(solutionResponse && solutionResponse.isOk) {
+		const solution = JSON.parse(solutionResponse.body);
+		if(solution.status !== 0)
+			remoteSolutions[md5Hash] = solution;
+		return solution;
+	}
 	return {
 		status: 99
 	};
