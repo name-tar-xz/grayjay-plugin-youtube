@@ -157,13 +157,13 @@ const clients = {
 		ClientDisplayName: "WEB"
 	},
 	ANDROID: {
-		UserAgent: "com.google.android.youtube/19.28.35 (Linux; U; Android 15; US) gzip",
-		Version: "19.28.35",
+		UserAgent: "com.google.android.youtube/21.03.36 (Linux; U; Android 15; US) gzip",
+		Version: "21.03.36",
 		ClientDisplayName: "ANDROID",
 
 		ContextClient: {
 			"clientName":"ANDROID",
-			"clientVersion":"19.28.35",
+			"clientVersion":"21.03.36",
 			"clientScreen":"WATCH",
 			"platform":"MOBILE",
 			"osName":"Android",
@@ -7085,7 +7085,7 @@ function requestAndroidShortStreamingData(videoId, batch, visitorData, useLogin)
 		context: {
 			client: {
 				"clientName": "ANDROID",
-				"clientVersion": "19.28.35",
+				"clientVersion": "21.03.36",
 				"clientScreen": "WATCH",
 				"platform": "MOBILE",
 				"osName": "Android",
@@ -9254,6 +9254,23 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 		if(!id)
 			return null;
 
+		let duration = undefined;
+		if(videoRenderer?.contentImage?.thumbnailViewModel?.overlays) {
+			for(let overlay of videoRenderer.contentImage.thumbnailViewModel.overlays) {
+				if(overlay?.thumbnailBottomOverlayViewModel?.badges) {
+					for(let badge of overlay.thumbnailBottomOverlayViewModel.badges) {
+						const badgeText = badge.thumbnailBadgeViewModel.text;
+						if(/[0-9]?[0-9]?:?[0-9]?[0-9]:[0-9]{2}/.test) {
+							duration = extractHumanTime_Seconds(badgeText);
+							if(duration)
+								break;
+						}
+					}
+				}
+				if(duration)
+					break;
+			}
+		}
 		const title = extractText_String(videoRenderer.metadata?.lockupMetadataViewModel?.title);
 		if(!title)
 			return null;
@@ -9264,7 +9281,7 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 				thumbnails: thumbnailViewModelData?.thumbnails ?? new Thumbnails([]),
 				author: author,
 				uploadDate: date,//parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)),
-				duration: thumbnailViewModelData?.duration ?? 0, //extractHumanTime_Seconds(videoRenderer.lengthText.simpleText),
+				duration: (duration && duration > 0) ? duration : (thumbnailViewModelData?.duration ?? 0), //extractHumanTime_Seconds(videoRenderer.lengthText.simpleText),
 				viewCount: viewCount ?? 0,
 				url: URL_BASE + "/watch?v=" + id,
 				isLive: false,
@@ -10730,6 +10747,9 @@ function findSigDecryptorFunction(jsUrl, code, codeRaw) {
 	if(sigDecryptDescs[jsUrl])
 		return sigDecryptDescs[jsUrl];
 
+	const jsUrlHashMatch = (/\/s\/player\/([a-zA-Z0-9]+)\//g).exec(jsUrl);
+	const jsUrlHash = (jsUrlHashMatch) ? jsUrlHashMatch[1] : jsUrl;
+	
 	if(IS_TESTING)
 		console.log("findSigDecryptorFunction", jsUrl)
 
@@ -10742,6 +10762,16 @@ function findSigDecryptorFunction(jsUrl, code, codeRaw) {
 	//	callerMatch = callerMatch2;
 		//"[^a-zA-Z0-9_$]" + functionMatch[1] + "\\([0-9]+,[^;]*?decodeURI[^;]*?\\)");
 	if(!callerMatch) {
+		if(codeRaw) {
+			const solution = findRemoteSolution(jsUrl, codeRaw);
+			if(solution && solution.status == 1 && solution.solutionSig && solution?.validationSig?.isValid == true) {
+				if(config.id == "35ae969a-a7db-11ed-afa1-0242ac120003")
+					bridge.toast("Remote solution for sigParam [" + jsUrlHash + "]");
+				return rewriteRemoteSolution(solution.solutionSig);
+			}
+		}
+
+
 		return {name: "unknown"};
 		if(bridge.devSubmit) bridge.devSubmit("findSigDecryptorFunction - Failed to find sig decryptor(player caller): ", "//" + jsUrl + "\n\n" + code);
 		throw new ScriptException("findSigDecryptorFunction - Failed to find sig decryptor(player caller): " + jsUrl);
@@ -10782,7 +10812,7 @@ function findNDecryptorFunction(jsUrl, code, codeRaw) {
 		//Alt solution..
 		const function2Match = /Object\[.*?[a-zA-Z0-9$_]+\s?=\s?([a-zA-Z0-9$_]+)\(([A-Za-z0-9]+\s?\^?\s?[0-9]*),\s?([A-Za-z0-9]+\s?\^?\s?[0-9]*),\s?([a-zA-Z0-9$_]+)\)/s.exec(code);
 		if(function2Match) {
-			bridge.toast("Using untested cipher solution, let us know if it works! [" + hash + "]");
+			//bridge.toast("Using untested cipher solution, let us know if it works! [" + hash + "]");
 			functionMatch = function2Match;
 		}
 		else {
@@ -12321,7 +12351,7 @@ function getJSDOM() {
 	}
 }
 
-const USE_BROWSER = bridge.hasPackage && bridge.hasPackage("Browser");
+const USE_BROWSER = bridge.hasPackage && bridge.hasPackage("Browser") && !IS_TESTING;
 if(USE_BROWSER)
 	log("Using Browser");
 else 
