@@ -78,7 +78,7 @@ const REGEX_INITIAL_PLAYER_DATA = new RegExp("<script.*?var ytInitialPlayerRespo
 const REGEX_INITIAL_PLAYER_DATA_FALLBACK = new RegExp("<script.*?var ytInitialPlayerResponse = (.*});var meta = document\.createElement");
 
 const REGEX_HUMAN_NUMBER = new RegExp("([0-9\\.,]*)([a-zA-Z]*)");
-const REGEX_HUMAN_AGO = new RegExp("([0-9]*) ([a-zA-Z]*) ago");
+const REGEX_HUMAN_AGO = new RegExp("([0-9]+)\\s*([a-zA-Z]+)\\s+ago");
 const REGEX_VIEW_COUNT = new RegExp("([0-9,]+)[A-Z]? views");
 
 const REGEX_DATE_HUMAN = new RegExp("([A-Za-z]*) ([0-9]*), ([1-9][0-9][0-9][0-9])");
@@ -1372,17 +1372,26 @@ function handleYoutubeDislikes(likes, resp) {
 
 function applyDeArrowBatch(videos) {
 	try {
-		const batchPairs = [];
+		if(!videos || videos.length == 0)
+			return;
+
+		const batchVideos = [];
 		const batch = http.batch();
 		for(let video of videos) {
-			const req = (video?.id?.value) ?
-				getDeArrow(video.id.value, batch) :
-				batch.DUMMY();
+			const videoId = video?.id?.value;
+			if(!videoId)
+				continue;
+
+			getDeArrow(videoId, batch);
+			batchVideos.push(video);
 		}
+		if(batchVideos.length == 0)
+			return;
+
 		const responses = batch.execute();
 
 		for(let i = 0; i < responses.length; i++) {
-			const video = videos[i];
+			const video = batchVideos[i];
 			const resp = responses[i];
 
 			if(video && resp && resp.isOk) {
@@ -1404,7 +1413,7 @@ function applyDeArrowBatch(videos) {
 		}
 	}
 	catch(ex) {
-		bridge.toast("DeArrow failed:\n" + ex);
+		console.log("DeArrow failed", ex);
 	}
 }
 function getDeArrow(videoId, batch) {
@@ -1412,7 +1421,7 @@ function getDeArrow(videoId, batch) {
 		return batch.GET(URL_YOUTUBE_DEARROW + videoId, {}, false);
 	else {
 		const resp = http.GET(URL_YOUTUBE_DEARROW + videoId, {}, false);
-		return handleDeArrow(resp);
+		return handleDeArrow(videoId, resp);
 	}
 }
 function handleDeArrow(videoId, resp) {
@@ -1438,7 +1447,7 @@ function handleDeArrow(videoId, resp) {
 		}
 	}
 	catch(ex) {
-		console.log("Failed to fetch Youtube Dislikes", ex);
+		console.log("Failed to fetch DeArrow", ex);
 	}
 }
 
@@ -3059,7 +3068,7 @@ source.getChannelContents = (url, type, order, filters) => {
 	const initialData = requestInitialData(url, useAuth, useAuth);
 	if(!initialData)
 	    throw new ScriptException("No channel data found for: " + url);
-
+	
 	const errorAlerts = initialData?.alerts?.filter(x=>x.alertRenderer?.type == "ERROR") ?? [];
 	if(errorAlerts.length > 0){
 		throw new UnavailableException(extractText_String(errorAlerts[0].alertRenderer.text));
@@ -9249,9 +9258,10 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 		let date = 0;
 
 		for(let metadataPart of metadataParts) {
+			const partText = metadataPart?.text?.content;
 
 			//Author
-			if(i == 0) {
+			if(i == 0 && !author) {
 				const authorName = extractText_String(metadataPart?.text);
 				if(!authorName)
 					return null;
@@ -9276,10 +9286,8 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 				)
 			}
 			else if(metadataPart.text) {
-				const partText = metadataPart.text.content;
-				
 				if(partText) {
-					const matchViews = partText.match(/([0-9,.]+[A-Z]) views?/);
+					const matchViews = partText.match(/([0-9,.]+[A-Z]?) (?:views?|watching)/i);
 					if(matchViews) {
 						viewCount = extractHumanNumber_Integer(matchViews[1]);
 						continue;
@@ -9302,7 +9310,7 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 					const partText = metadataPart.text.content;
 					
 					if(partText) {
-						const matchViews = partText.match(/([0-9,.]+[A-Z]) views?/);
+						const matchViews = partText.match(/([0-9,.]+[A-Z]?) (?:views?|watching)/i);
 						if(matchViews) {
 							viewCount = extractHumanNumber_Integer(matchViews[1]);
 							continue;
@@ -9320,6 +9328,10 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 
 		const thumbnailViewModel = videoRenderer?.contentImage?.thumbnailViewModel;
 		const thumbnailViewModelData = extractThumbnailViewModel_Data(thumbnailViewModel);
+		const isLive = !!thumbnailViewModel?.overlays?.find(overlay=>
+			overlay?.thumbnailBottomOverlayViewModel?.badges?.find(badge=>
+				badge?.thumbnailBadgeViewModel?.text == "LIVE" ||
+				badge?.thumbnailBadgeViewModel?.badgeStyle == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE"));
 
 		if(!author)
 			return null;
@@ -9357,11 +9369,11 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 				name: escapeUnicode(title),
 				thumbnails: thumbnailViewModelData?.thumbnails ?? new Thumbnails([]),
 				author: author,
-				uploadDate: date,//parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)),
-				duration: (duration && duration > 0) ? duration : (thumbnailViewModelData?.duration ?? 0), //extractHumanTime_Seconds(videoRenderer.lengthText.simpleText),
+				uploadDate: isLive && !date ? parseInt(new Date().getTime()/1000) : date,//parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)),
+				duration: isLive ? 0 : ((duration && duration > 0) ? duration : (thumbnailViewModelData?.duration ?? 0)), //extractHumanTime_Seconds(videoRenderer.lengthText.simpleText),
 				viewCount: viewCount ?? 0,
 				url: URL_BASE + "/watch?v=" + id,
-				isLive: false,
+				isLive: isLive,
 				extractType: "Video"
 			});
 	}
@@ -9820,24 +9832,39 @@ function extractAgoText_Timestamp(str) {
 	const value = parseInt(match[1]);
 	const now = parseInt(new Date().getTime() / 1000);
 	switch(match[2]) {
+		case "s":
 		case "second":
 		case "seconds":
 			return now - value;
+		case "m":
+		case "min":
+		case "mins":
 		case "minute":
 		case "minutes":
 			return now - value * 60;
+		case "h":
+		case "hr":
+		case "hrs":
 		case "hour":
 		case "hours":
 			return now - value * 60 * 60;
+		case "d":
 		case "day":
 		case "days":
 			return now - value * 60 * 60 * 24;
+		case "w":
+		case "wk":
+		case "wks":
 		case "week":
 		case "weeks":
 			return now - value * 60 * 60 * 24 * 7;
+		case "mo":
 		case "month":
 		case "months":
 			return now - value * 60 * 60 * 24 * 30; //For now it will suffice
+		case "y":
+		case "yr":
+		case "yrs":
 		case "year":
 		case "years":
 			return now - value * 60 * 60 * 24 * 365;
