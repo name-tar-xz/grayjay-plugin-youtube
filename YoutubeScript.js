@@ -9332,6 +9332,14 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 			overlay?.thumbnailBottomOverlayViewModel?.badges?.find(badge=>
 				badge?.thumbnailBadgeViewModel?.text == "LIVE" ||
 				badge?.thumbnailBadgeViewModel?.badgeStyle == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE"));
+		
+		const isMemberOnly = !!(videoRenderer?.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel?.metadataRows)
+			?.find(row=>row?.badges?.find(badge=>badge?.badgeViewModel?.badgeStyle == "BADGE_MEMBERS_ONLY"));
+		
+		if(isMemberOnly && !_settings.allowMemberContent) {
+			log("MEMBER ONLY VIDEO IGNORED");
+			return null;
+		}
 
 		if(!author)
 			return null;
@@ -9366,7 +9374,7 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 
 			return new PlatformVideo({
 				id: new PlatformID(PLATFORM, id, config.id),
-				name: escapeUnicode(title),
+				name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(title),
 				thumbnails: thumbnailViewModelData?.thumbnails ?? new Thumbnails([]),
 				author: author,
 				uploadDate: isLive && !date ? parseInt(new Date().getTime()/1000) : date,//parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)),
