@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://github.com/name-tar-xz/grayjay-plugin-youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 337,
+	"version": 339,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -129,6 +129,13 @@
 			"variable": "useAndroid",
 			"name": "Enable Android Streams",
 			"description": "Attempts to use Android streams if available, may be smoother experience. May not always be available.",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
+			"variable": "useAndroidVR",
+			"name": "Enable Android VR Streams",
+			"description": "Attempts to use Android VR streams as an additional fallback if available. May not always be available.",
 			"type": "Boolean",
 			"default": "true"
 		},
@@ -433,6 +440,14 @@
 
 
 	"changelog": {
+		"339": [
+			"Fix: Added Android VR sources",
+			"Fix: Shorts work again",
+			"Fix: Membership video detection"
+		],
+		"338": [
+			"Fix: Membership video detection from VideoLockupModel"
+		],
 		"337": [
 			"Fix: Fixed issue causing date to be empty and videos missing from channel"
 		],

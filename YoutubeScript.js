@@ -106,6 +106,7 @@ const IOS_OS_VERSION_DETAILED = "17.4.1.21E237"
 const USER_AGENT_IOS = "com.google.ios.youtube/" + IOS_APP_VERSION + "(" + IOS_DEVICE_VERSION + "; U; CPU iOS " + IOS_OS_VERSION + " like Mac OS X; US)";
 
 const USER_AGENT_ANDROID = "com.google.android.youtube/17.31.35 (Linux; U; Android 12; US) gzip";
+const USER_AGENT_ANDROID_VR = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; en_US; Quest 3 Build/SQ3A.220605.009.A1) gzip";
 const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.0 Safari/537.36";
 
 const USE_MOBILE_PAGES = true;
@@ -113,6 +114,7 @@ const USE_ANDROID_FALLBACK = false;
 let USE_IOS_LIVE_FALLBACK = true;
 const USE_IOS_VIDEOS_FALLBACK = true;
 const USE_ANDROID_VIDEOS_FALLBACK = true;
+const USE_ANDROID_VR_VIDEOS_FALLBACK = true;
 const USE_TV_VIDEOS_FALLBACK = false;
 
 let USE_ABR_VIDEOS = false;
@@ -180,6 +182,26 @@ const clients = {
 		ClientVersion: "",
 		ClientName: 5,
 		ClientDisplayName: "IOS"
+	},
+	ANDROID_VR: {
+		UserAgent: USER_AGENT_ANDROID_VR,
+		Version: "1.65.10",
+		ClientName: 28,
+		ClientDisplayName: "ANDROID_VR",
+
+		ContextClient: {
+			"clientName":"ANDROID_VR",
+			"clientVersion":"1.65.10",
+			"deviceMake":"Oculus",
+			"deviceModel":"Quest 3",
+			"platform":"MOBILE",
+			"osName":"Android",
+			"osVersion":"12L",
+			"androidSdkVersion":32,
+			"hl":"en-US",
+			"gl":"US",
+			"utcOffsetMinutes":0
+		}
 	}
 }
 
@@ -1001,7 +1023,12 @@ class YTSessionClient {
 			batch = requestAndroidShortStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
 
-		let [respPlayerData, respInitialData, respDislikes, respDeArrow, respiOS, respAndroid] = batch.execute();
+		//Request: Android VR Streaming Data [6]
+		if(!USE_ABR_VIDEOS && !simplify)
+			batch = requestAndroidVRStreamingData(videoId, batch, context.bgData, useLogin);
+		else batch = batch.DUMMY();
+
+		let [respPlayerData, respInitialData, respDislikes, respDeArrow, respiOS, respAndroid, respAndroidVR] = batch.execute();
 		//#endregion
 
 		//#region Video Data
@@ -1110,6 +1137,31 @@ class YTSessionClient {
 							}
 							else 
 								log("ANDROID PLAYBACK VERIFICATION FAILED, FALLBACK");
+						}
+					}
+				}
+				//#endregion
+
+				//#region Android VR
+				if(!videoDetails.video && !forceUmp && USE_ANDROID_VR_VIDEOS_FALLBACK && respAndroidVR && !!_settings.useAndroidVR) {
+					if(respAndroidVR.isOk) {
+						let androidVRData = JSON.parse(respAndroidVR.body);
+						if(androidVRData.playerResponse)
+							androidVRData = androidVRData.playerResponse;
+
+						if(IS_TESTING)
+							console.log("Android VR Streaming Data", androidVRData);
+
+						if(androidVRData?.streamingData?.adaptiveFormats) {
+							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(androidVRData.streamingData.adaptiveFormats, context.jsUrl, contextData, "Android VR ");
+
+							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+								videoDetails.video = newDescriptor;
+								if(!!_settings["showVerboseToasts"])
+									bridge.toast("Using Android VR sources");
+							}
+							else
+								log("ANDROID VR PLAYBACK VERIFICATION FAILED, FALLBACK");
 						}
 					}
 				}
@@ -4278,7 +4330,6 @@ function generateAVDash(videoHeader, audioHeader) {
         ,
         ""
     );
-    log(mpd);
     return mpd;
 }
 
@@ -4852,7 +4903,6 @@ function generateWEBMDash(webm, templateUrl, initUrl) {
 			, indent + " ")
 		, indent + " ")
 	, "");
-								log(mpd);
 	return mpd;
 }
 function splitMS(ms) {
@@ -6543,7 +6593,7 @@ function extractReelItemWatch_VideoAndContinuation(json) {
 	});
 	const endpointVideo = extractReelWatchEndpoint_Video(endpoint);
 
-	const metadataItems = json?.overlay?.reelPlayerOverlayRenderer?.metapanel?.reelMetapanelViewModel?.metadataItems;
+	const metadataItems = json?.overlay?.reelPlayerOverlayRenderer?.metapanel?.reelMetapanelViewModel?.metadataItems ?? [];
 	for(let metadataItem of metadataItems) {
 		switchKey(metadataItem, {
 			reelChannelBarViewModel(renderer) {
@@ -7271,6 +7321,64 @@ function requestAndroidStreamingData(videoId) {
 		return JSON.parse(resp.body);
 	else
 		return null;
+}
+function requestAndroidVRStreamingData(videoId, batch, visitorData, useLogin) {
+	const body = {
+		videoId: videoId,
+		cpn: "" + randomString(16),
+		contentCheckOk: "true",
+		racyCheckOn: "true",
+		context: {
+			client: {
+				"clientName": "ANDROID_VR",
+				"clientVersion": "1.65.10",
+				"deviceMake": "Oculus",
+				"deviceModel": "Quest 3",
+				"platform": "MOBILE",
+				"osName": "Android",
+				"osVersion": "12L",
+				"androidSdkVersion": 32,
+				"hl": langDisplay,
+				"gl": langRegion,
+				"utcOffsetMinutes": 0
+			},
+			user: {
+				"lockedSafetyMode": false
+			}
+		}
+	};
+	const visitorToken = visitorData?.visitorData ?? visitorData?.dataSyncId;
+	if(visitorToken && !useLogin) {
+		body.context.client.visitorData = visitorToken;
+	}
+	else if(visitorData?.visitorDataLogin && useLogin){
+		body.context.client.visitorData = visitorData?.visitorDataLogin;
+	}
+	else if(visitorData?.dataSyncId && useLogin) {
+		body.context.client.datasyncId = visitorData?.dataSyncId;
+	}
+	const headers = {
+		"Content-Type": "application/json",
+		"User-Agent": USER_AGENT_ANDROID_VR,
+		"X-Goog-Api-Format-Version": "2",
+		"Accept-Language": "en-US, en;q=0.9"
+	};
+
+	const token = randomString(12);
+	const clientContext = getClientContext(false);
+	const url = URL_PLAYER +
+		"?key=" + clientContext.INNERTUBE_API_KEY +
+		"&prettyPrint=false" +
+		"&t=" + token +
+		"&id=" + videoId
+
+	if(batch) {
+		return batch.POST(url, JSON.stringify(body), headers, !!useLogin);
+	}
+	else {
+		const resp = http.POST(url, JSON.stringify(body), headers, !!useLogin);
+		return resp;
+	}
 }
 function requestTvHtml5EmbedStreamingData(videoId, sts, bgData, withLogin = false, batch) {
 	const body = {
