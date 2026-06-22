@@ -3407,8 +3407,17 @@ source.getPlaylist = function (url) {
 				const richGridShelves = extractRichGridRenderer_Shelves(richGridRenderer, {allowShorts: true, allowNoAuthor: true});
 				videoPager = new RichGridPager(richGridShelves, {}, USE_MOBILE_PAGES, true);
 			}
-			else
-            	throw new ScriptException("No content found for playlist");
+			else {
+				const sectionList = tab?.tabRenderer?.content?.sectionListRenderer;
+				if(sectionList?.contents) {
+					const result = extractSectionListRenderer_Sections(sectionList);
+					const continuationToken = result.continuation?.token ?? result.subContinuations?.[0];
+					if(result.videos.length > 0 || continuationToken)
+						videoPager = new PlaylistVideoPager(result.videos, continuationToken);
+				}
+				if(!videoPager)
+					throw new ScriptException("No content found for playlist");
+			}
 		}
 
 		let thumbnail = null;
@@ -3536,6 +3545,14 @@ class PlaylistVideoPager extends VideoPager {
 				},
 				continuationItemRenderer(continueRenderer) {
 					me.continuation = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
+				},
+				continuationItemViewModel(renderer) {
+					me.continuation = extractContinuationItemViewModel_Continuation(renderer).token;
+				},
+				default() {
+					const video = switchKeyVideo(playlistRenderer);
+					if(video)
+						videos.push(video);
 				}
 			});
 		}
@@ -8922,6 +8939,9 @@ function extractSectionListRenderer_Sections(sectionListRenderer, contextData) {
 			},
 			continuationItemRenderer(renderer) {
 				continuation = extractContinuationItemRenderer_Continuation(renderer, contextData);
+			},
+			continuationItemViewModel(renderer) {
+				continuation = extractContinuationItemViewModel_Continuation(renderer);
 			}
 		});
 	}
@@ -9018,6 +9038,11 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 			},
 			continuationItemRenderer(renderer) {
 				const token = renderer?.continuationEndpoint?.continuationCommand?.token
+				if(token)
+					continuationToken = token;
+			},
+			continuationItemViewModel(renderer) {
+				const token = extractContinuationItemViewModel_Continuation(renderer).token;
 				if(token)
 					continuationToken = token;
 			},
@@ -9143,6 +9168,12 @@ function extractContinuationItemRenderer_Continuation(continuationItemRenderer) 
 	return  {
 		url: continuationItemRenderer.continuationEndpoint.commandMetadata.apiUrl, //TODO: See if this is useful at all
 		token: continuationItemRenderer.continuationEndpoint.continuationCommand.token
+	};
+}
+function extractContinuationItemViewModel_Continuation(continuationItemViewModel) {
+	return {
+		url: null,
+		token: continuationItemViewModel?.continuationCommand?.innertubeCommand?.continuationCommand?.token
 	};
 }
 function extractRichSectionRenderer_Shelf(sectionRenderer, contextData) {
@@ -9439,10 +9470,15 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 		const isLive = !!thumbnailViewModel?.overlays?.find(overlay=>
 			overlay?.thumbnailBottomOverlayViewModel?.badges?.find(badge=>
 				badge?.thumbnailBadgeViewModel?.text == "LIVE" ||
-				badge?.thumbnailBadgeViewModel?.badgeStyle == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE"));
-		
-		const isMemberOnly = !!(videoRenderer?.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel?.metadataRows)
-			?.find(row=>row?.badges?.find(badge=>badge?.badgeViewModel?.badgeStyle == "BADGE_MEMBERS_ONLY"));
+				badge?.thumbnailBadgeViewModel?.badgeStyle == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE") ||
+			overlay?.thumbnailOverlayBadgeViewModel?.thumbnailBadges?.find(badge=>
+				badge?.thumbnailBadgeViewModel?.text == "LIVE" ||
+				badge?.thumbnailBadgeViewModel?.badgeStyle == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE")) ||
+			!!(metadataRows?.find(row=>row?.badges?.find(badge=>
+				badge?.badgeViewModel?.badgeStyle == "BADGE_STYLE_TYPE_LIVE_NOW")));
+
+		const isMemberOnly = !!(metadataRows
+			?.find(row=>row?.badges?.find(badge=>badge?.badgeViewModel?.badgeStyle == "BADGE_MEMBERS_ONLY")));
 		
 		if(isMemberOnly && !_settings.allowMemberContent) {
 			log("MEMBER ONLY VIDEO IGNORED");

@@ -8,10 +8,10 @@
 	"repositoryUrl": "https://github.com/name-tar-xz/grayjay-plugin-youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 339,
+	"version": 341,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
-	
+
 	"scriptSignature": "",
 	"scriptPublicKey": "",
 	"packages": ["Http", "Utilities", "DOMParser"],
@@ -19,7 +19,7 @@
 	"subscriptionRateLimit": 9999,
 
 	"reduceFunctionsInLimitedVersion": true,
-	
+
 	"allowEval": false,
 	"allowUrls": [
 		"youtube.com",
@@ -413,7 +413,7 @@
 		"captchaUrl": null,
 		"cookiesToFind": ["GOOGLE_ABUSE_EXEMPTION"]
 	},
-	
+
 	"authentication": {
 		"userAgent": "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36",
 		"completionUrl": "https://m.youtube.com/youtubei/v1/guide?*",
@@ -440,6 +440,13 @@
 
 
 	"changelog": {
+		"341": [
+			"Fix: LIVE badge for livestream videos",
+			"Fix: Loading playlists"
+        ],
+		"340": [
+			"Fix: Membership first video detection"
+        ],
 		"339": [
 			"Fix: Added Android VR sources",
 			"Fix: Shorts work again",
