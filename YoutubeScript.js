@@ -80,6 +80,8 @@ const REGEX_INITIAL_PLAYER_DATA_FALLBACK = new RegExp("<script.*?var ytInitialPl
 const REGEX_HUMAN_NUMBER = new RegExp("([0-9\\.,]*)([a-zA-Z]*)");
 const REGEX_HUMAN_AGO = new RegExp("([0-9]+)\\s*([a-zA-Z]+)\\s+ago");
 const REGEX_VIEW_COUNT = new RegExp("([0-9,]+)[A-Z]? views");
+const REGEX_STREAMED = new RegExp("Streamed (.*)");
+const REGEX_SCHEDULED_FOR = new RegExp("Scheduled for (.*)");
 
 const REGEX_DATE_HUMAN = new RegExp("([A-Za-z]*) ([0-9]*), ([1-9][0-9][0-9][0-9])");
 const REGEX_DATE_ISO = new RegExp("([1-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])");
@@ -1097,6 +1099,11 @@ class YTSessionClient {
 		if(initialData)
 			extractVideoDetailsInitialData_Metadata(initialData, videoDetails);
 
+		if(playerData.playabilityStatus?.liveStreamability?.liveStreamabilityRenderer?.offlineSlate?.liveStreamOfflineSlateRenderer?.scheduledStartTime) {
+			const betterDate = new Date(parseInt(playerData.playabilityStatus.liveStreamability.liveStreamabilityRenderer.offlineSlate.liveStreamOfflineSlateRenderer.scheduledStartTime) * 1000);
+			videoDetails.datetime = betterDate.getTime() / 1000;
+		}
+
 		if(!videoDetails) {
 			throw new UnavailableException("No video found for [" + videoId + "]");
 		}
@@ -1231,8 +1238,30 @@ class YTSessionClient {
 						bridge.toast("Failed to get iOS stream data");
 				}
 				else {
-					if(!videoDetails.live)
+					if(!videoDetails.live) {
+						console.log(videoDetails);
+						const plannedDate = videoDetails.datetime ? new Date(videoDetails.datetime * 1000) : null
+						if(plannedDate) {
+							console.log("Airing on ", plannedDate);
+
+							const diffS = Math.floor((plannedDate.getTime() - (new Date()).getTime()) / 1000);
+
+							if(diffS > (-60*60)) {
+								let diffHuman = "";
+								if(diffS > 0) {
+									if(diffS < 60) diffHuman = " (expected in " + diffS + "s)";
+									else if(diffS < 60 * 60) diffHuman = " (expected in " + Math.floor(diffS / (60)) + "m)";
+									else if(diffS < 60 * 60 * 24) diffHuman = " (expected in " + Math.floor(diffS / (60*60)) + "h)";
+									else if(diffS > 0) diffHuman = " (expected in " + (diffS / Math.floor(60*60*24)) + " days)";
+								}
+								const diff = plannedDate
+								videoDetails.video = new VideoSourceDescriptor([])
+								return videoDetails;
+								//throw new UnavailableException("Video not available yet" + diffHuman);
+							}
+						}
 						throw new ScriptException("No handling for live videos without iOS implemented");
+					}
 					if(!!_settings.use_html5_livestreams_pot) {
 						let liveStreamPot = (!context.playerConfig.useVideoIdPot) ? 
 							await tryGetPOTCustom(videoId, (pot)=>{return pot}, true) :
@@ -9426,7 +9455,7 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 			}
 			else if(metadataPart.text) {
 				if(partText) {
-					const matchViews = partText.match(/([0-9,.]+[A-Z]?) (?:views?|watching)/i);
+					const matchViews = partText.match(/([0-9,.]+[A-Z]?) (?:views?|watching|waiting)/i);
 					if(matchViews) {
 						viewCount = extractHumanNumber_Integer(matchViews[1]);
 						continue;
@@ -9434,6 +9463,18 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 					const matchAgo = partText.match(REGEX_HUMAN_AGO);
 					if(matchAgo) {
 						date = extractAgoText_Timestamp(partText);
+						continue;
+					}
+					const streamed = partText.match(REGEX_STREAMED);
+					if(streamed) {
+						const parsedDate = new Date(new Date(streamed[1]).getTime() + (7*60*60 * 1000)) //Converted from display US West timezone.
+						date = (parsedDate.getTime() - parsedDate.getTimezoneOffset() * 60 * 1000) / 1000;
+						continue;
+					}
+					const scheduled = partText.match(REGEX_SCHEDULED_FOR);
+					if(scheduled) {
+						const parsedDate = new Date(new Date(scheduled[1]).getTime() + (7*60*60 * 1000)) //Converted from display US West timezone.
+						date = (parsedDate.getTime() - parsedDate.getTimezoneOffset() * 60 * 1000) / 1000;
 						continue;
 					}
 				}
@@ -9449,7 +9490,7 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 					const partText = metadataPart.text.content;
 					
 					if(partText) {
-						const matchViews = partText.match(/([0-9,.]+[A-Z]?) (?:views?|watching)/i);
+						const matchViews = partText.match(/([0-9,.]+[A-Z]?) (?:views?|watching|waiting)/i);
 						if(matchViews) {
 							viewCount = extractHumanNumber_Integer(matchViews[1]);
 							continue;
@@ -9457,6 +9498,18 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 						const matchAgo = partText.match(REGEX_HUMAN_AGO);
 						if(matchAgo) {
 							date = extractAgoText_Timestamp(partText);
+							continue;
+						}
+						const streamed = partText.match(REGEX_STREAMED);
+						if(streamed) {
+							const parsedDate = new Date(new Date(streamed[1]).getTime() + (7*60*60 * 1000)) //Converted from display US West timezone.
+							date = (parsedDate.getTime() - parsedDate.getTimezoneOffset() * 60 * 1000) / 1000;
+							continue;
+						}
+						const scheduled = partText.match(REGEX_SCHEDULED_FOR);
+						if(scheduled) {
+							const parsedDate = new Date(new Date(scheduled[1]).getTime() + (7*60*60 * 1000)) //Converted from display US West timezone.
+							date = (parsedDate.getTime() - parsedDate.getTimezoneOffset() * 60 * 1000) / 1000;
 							continue;
 						}
 					}
