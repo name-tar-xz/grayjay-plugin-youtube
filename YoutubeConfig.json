@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://github.com/name-tar-xz/grayjay-plugin-youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 342,
+	"version": 353,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -397,6 +397,14 @@
 			"isAdvanced": "true"
 		},
 		{
+			"variable": "use_native_ump",
+			"name": "Native UMP Player (Experimental)",
+			"description": "Play VOD through the native SABR/UMP player instead of the generated DASH path",
+			"type": "Boolean",
+			"default": "false",
+			"isAdvanced": "true"
+		},
+		{
 			"variable": "use_combined_ump_audio",
 			"name": "Use Combined UMP",
 			"description": "Experimental feature to use merged streams, which is theoretically better and more compatible",
@@ -440,6 +448,12 @@
 
 
 	"changelog": {
+                "353": [
+                        "Feature: Native UMP"
+                ],
+		"343": [
+			"Fix: Live streams"
+        ],
 		"342": [
 			"Fix: Channel livestreams not showing",
 			"Fix: Planned badges not always showing",

@@ -114,6 +114,7 @@ const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebK
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
 let USE_IOS_LIVE_FALLBACK = true;
+let USE_ANDROID_VR_LIVE_FALLBACK = true;
 const USE_IOS_VIDEOS_FALLBACK = true;
 const USE_ANDROID_VIDEOS_FALLBACK = true;
 const USE_ANDROID_VR_VIDEOS_FALLBACK = true;
@@ -217,6 +218,9 @@ const features = bridge.supportedFeatures ?? [];
 log(JSON.stringify(features));
 function canUse(feature) {
 	return features.indexOf(feature) >= 0;
+}
+function canUseNativeUMP() {
+	return !!_settings?.use_native_ump && canUse("UMPSource");
 }
 
 var _setMetadata = false;
@@ -993,7 +997,7 @@ class YTSessionClient {
 		//#region Request Batch
 		let batch = http.batch();
 
-		let potToUse = (!context.playerConfig.useVideoIdPot) ? 
+		let potToUse = (context.playerConfig.useVideoIdPot) ? 
 			await tryGetPOTCustom(videoId, (pot)=>{return pot}, true) :
 			await tryGetPOT(context.bgData, (pot)=>{return pot});
 		if(context.playerConfig.useVideoIdPot) log("POT Type Used (player): Video"); else log("POT Type Used (player): Session");
@@ -1174,6 +1178,13 @@ class YTSessionClient {
 				}
 				//#endregion
 
+				if(!videoDetails.video && canUseNativeUMP()) {
+					try {
+						videoDetails.video = await extractUMP_VideoDescriptor(playerData, context.jsUrl, context.clientConfig, url, useLogin, contextData);
+					} catch(ex) {
+						log("UMP VOD descriptor failed: " + ex);
+					}
+				}
 				//#region iOS
 				if(!videoDetails.video && !forceUmp && USE_IOS_VIDEOS_FALLBACK && respiOS && !!_settings.useiOS) {
 
@@ -1198,7 +1209,6 @@ class YTSessionClient {
 				}
 				//#endregion
 
-				// - UMP
 				if(!videoDetails.video)
 					videoDetails.video = extractABR_VideoDescriptor(playerData, context.jsUrl, context.clientConfig, url, useLogin, contextData, !!_settings?.use_secondry_ump_temp);
 
@@ -1213,23 +1223,65 @@ class YTSessionClient {
 			else {
 				//#region LIVE
 
-				if(USE_IOS_LIVE_FALLBACK && !!_settings.useiOS) {
-					log("requestIOSStreamingData (hls)");
+				const primaryLive = videoDetails.live;
+				videoDetails.live = null;
+
+				if(!videoDetails.live && !forceUmp && USE_ANDROID_VR_LIVE_FALLBACK && respAndroidVR && !!_settings.useAndroidVR) {
+					if(respAndroidVR.isOk) {
+						let androidVRData = JSON.parse(respAndroidVR.body);
+						if(androidVRData.playerResponse)
+							androidVRData = androidVRData.playerResponse;
+
+						if(androidVRData?.streamingData?.hlsManifestUrl) {
+							log("Using Android VR HLS substitute");
+							const source = new HLSSource({
+								name: "HLS (Android VR)",
+								url: decryptUrlN(androidVRData?.streamingData?.hlsManifestUrl, context.jsUrl)
+							});
+							videoDetails.hls = source;
+							videoDetails.live = source;
+							videoDetails.video = new VideoSourceDescriptor([source]);
+						}
+					}
+				}
+
+				if(!videoDetails.live) {
+					const plannedDate = videoDetails.datetime ? new Date(videoDetails.datetime * 1000) : null;
+					if(plannedDate) {
+						const diffS = Math.floor((plannedDate.getTime() - (new Date()).getTime()) / 1000);
+						if(diffS > (-60*60)) {
+							videoDetails.video = new VideoSourceDescriptor([]);
+							return videoDetails;
+						}
+					}
+				}
+
+				if(!videoDetails.live && canUseNativeUMP()) {
+					try {
+						const umpDescriptor = await extractUMP_VideoDescriptor(playerData, context.jsUrl, context.clientConfig, url, useLogin, contextData);
+						if(umpDescriptor && ((umpDescriptor.videoSources?.length ?? 0) > 0)) {
+							videoDetails.video = umpDescriptor;
+							videoDetails.hls = null;
+							videoDetails.dash = null;
+							return videoDetails;
+						}
+						log("UMP live descriptor empty (useLogin=" + useLogin + ")");
+					} catch(ex) {
+						log("UMP live descriptor failed: " + ex);
+					}
+				}
+
+				if(!videoDetails.live && !forceUmp && USE_IOS_LIVE_FALLBACK && !!_settings.useiOS) {
 					const iosDataResp = respiOS ?? requestIOSStreamingData(videoDetails.id.value);
-						
 					if(iosDataResp.isOk) {
 						const iosData = JSON.parse(iosDataResp.body);
-						if(IS_TESTING)
-							console.log("IOS Streaming Data", iosData);
 						if(iosData?.streamingData?.hlsManifestUrl) {
 							log("Using iOS HLS substitute");
-							log("HLS Url: " + iosData?.streamingData?.hlsManifestUrl);
 							const source = new HLSSource({
 								name: "HLS (IOS)",
 								url: decryptUrlN(iosData?.streamingData?.hlsManifestUrl, context.jsUrl)
 							});
-
-							videoDetails.hls = source
+							videoDetails.hls = source;
 							videoDetails.live = source;
 							videoDetails.video = new VideoSourceDescriptor([source]);
 						}
@@ -1237,45 +1289,27 @@ class YTSessionClient {
 					else
 						bridge.toast("Failed to get iOS stream data");
 				}
-				else {
-					if(!videoDetails.live) {
-						console.log(videoDetails);
-						const plannedDate = videoDetails.datetime ? new Date(videoDetails.datetime * 1000) : null
-						if(plannedDate) {
-							console.log("Airing on ", plannedDate);
 
-							const diffS = Math.floor((plannedDate.getTime() - (new Date()).getTime()) / 1000);
-
-							if(diffS > (-60*60)) {
-								let diffHuman = "";
-								if(diffS > 0) {
-									if(diffS < 60) diffHuman = " (expected in " + diffS + "s)";
-									else if(diffS < 60 * 60) diffHuman = " (expected in " + Math.floor(diffS / (60)) + "m)";
-									else if(diffS < 60 * 60 * 24) diffHuman = " (expected in " + Math.floor(diffS / (60*60)) + "h)";
-									else if(diffS > 0) diffHuman = " (expected in " + (diffS / Math.floor(60*60*24)) + " days)";
-								}
-								const diff = plannedDate
-								videoDetails.video = new VideoSourceDescriptor([])
-								return videoDetails;
-								//throw new UnavailableException("Video not available yet" + diffHuman);
-							}
-						}
-						throw new ScriptException("No handling for live videos without iOS implemented");
+				if(!videoDetails.live) {
+					if(primaryLive) {
+						videoDetails.hls = videoDetails.hls ?? primaryLive;
+						videoDetails.live = primaryLive;
+						videoDetails.video = new VideoSourceDescriptor([primaryLive]);
 					}
-					if(!!_settings.use_html5_livestreams_pot) {
-						let liveStreamPot = (!context.playerConfig.useVideoIdPot) ? 
-							await tryGetPOTCustom(videoId, (pot)=>{return pot}, true) :
-							await tryGetPOT(context.bgData, (pot)=>{return pot});
-
-							
-						log("HLS Url: " + videoDetails.live.url);
-						const updatedUrl = decryptUrlN(videoDetails.live.url, context.jsUrl)
-						log("HLS Url (Decrypted): " + updatedUrl);
-						videoDetails.live.url = updatedUrl + "?pot=" + liveStreamPot;
-					}
+					else
+						throw new ScriptException("No handling for live videos");
 				}
 
-				
+				if(!!_settings.use_html5_livestreams_pot) {
+					let liveStreamPot = (context.playerConfig.useVideoIdPot) ?
+						await tryGetPOTCustom(videoId, (pot)=>{return pot}, true) :
+						await tryGetPOT(context.bgData, (pot)=>{return pot});
+					log("HLS Url: " + videoDetails.live.url);
+					const updatedUrl = decryptUrlN(videoDetails.live.url, context.jsUrl);
+					log("HLS Url (Decrypted): " + updatedUrl);
+					videoDetails.live.url = updatedUrl + "?pot=" + liveStreamPot;
+				}
+
 				if(!videoDetails.video)
 					videoDetails.video = new VideoSourceDescriptor([]);
 				//#endregion
@@ -8072,14 +8106,12 @@ function getConvertedSubtitles(videoId, subRaw, contextData) {
 	const bgData = contextData?.bgData;
 	const pot = contextData.pot;
 	if (pot) {
-		bridge.toast("Subtitles using included POT");
 		if(subRaw.baseUrl && subRaw.baseUrl.startsWith("/api/"))
 			subRaw.baseUrl = URL_BASE + subRaw.baseUrl;
 		const subResp = http.GET(subRaw.baseUrl + "&pot=" + pot, {});
 		return (convertSubtitleResponse(subResp));
 	}
 	else if (canUse("Async") && bgData) {
-		bridge.toast("Subtitles using generated POT");
 		return new Promise((resolve, reject) => {
 			setTimeout(() => {
 				if (!didResolve) {
@@ -8092,7 +8124,6 @@ function getConvertedSubtitles(videoId, subRaw, contextData) {
 					bg.getTokenOrCreateCustom(videoId, (pot) => {
 						log("Botguard token to use (Subtitles): " + pot);
 						console.log("Botguard Token to use (Subtitles):", pot);
-						bridge.toast("Subtitles got POT");
 
 						if(subRaw.baseUrl && subRaw.baseUrl.startsWith("/api/"))
 							subRaw.baseUrl = URL_BASE + subRaw.baseUrl;
@@ -8112,7 +8143,6 @@ function getConvertedSubtitles(videoId, subRaw, contextData) {
 		});
 	}
 	else {
-		bridge.toast("Subtitles without POT");
 		log("Subtitles without POT (canUse:" + canUse("Async") + ", bgData: " + JSON.stringify(bgData) + ")")
 		const subResp = http.GET(subRaw.baseUrl, {});
 		return convertSubtitleResponse(subResp);
@@ -8492,6 +8522,120 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, pare
 				return source;
 			})).filter(x => x != null)
 	);
+}
+
+function extractUMP_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, parentUrl, usedLogin, contextData) {
+	return extractUMP_VideoDescriptorAsync(initialPlayerData, jsUrl, clientConfig, parentUrl, usedLogin, contextData);
+}
+async function extractUMP_VideoDescriptorAsync(initialPlayerData, jsUrl, clientConfig, parentUrl, usedLogin, contextData) {
+	const abrStreamingUrl = (initialPlayerData?.streamingData?.serverAbrStreamingUrl)
+		? decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false)
+		: undefined;
+	if (!abrStreamingUrl) {
+		log("UMP descriptor skipped: no serverAbrStreamingUrl (isLive=" + (!!initialPlayerData?.videoDetails?.isLive || !!initialPlayerData?.videoDetails?.isLiveNow) + ")");
+		return undefined;
+	}
+
+	const ustreamerConfig = initialPlayerData?.playerConfig?.mediaCommonConfig?.mediaUstreamerRequestConfig?.videoPlaybackUstreamerConfig;
+	if (!ustreamerConfig) {
+		log("UMP descriptor skipped: no ustreamerConfig (isLive=" + (!!initialPlayerData?.videoDetails?.isLive || !!initialPlayerData?.videoDetails?.isLiveNow) + ")");
+		return undefined;
+	}
+
+	const adaptiveFormats = initialPlayerData.streamingData.adaptiveFormats || [];
+	const isLive = !!initialPlayerData?.videoDetails?.isLive || !!initialPlayerData?.videoDetails?.isLiveNow;
+
+	let duration = 0;
+	if (!isLive) {
+		if (initialPlayerData?.microformat?.playerMicroformatRenderer?.lengthSeconds)
+			duration = parseInt(initialPlayerData.microformat.playerMicroformatRenderer.lengthSeconds) || 0;
+		else if (initialPlayerData?.videoDetails?.lengthSeconds)
+			duration = parseInt(initialPlayerData.videoDetails.lengthSeconds) || 0;
+	}
+
+	const hasOriginal = !!(adaptiveFormats
+		.filter(x => x.mimeType.startsWith("audio/"))
+		.find(x => (x.audioTrack?.displayName?.toLowerCase()?.indexOf("original") ?? -1) >= 0));
+
+	function mapFormat(y) {
+		const isVideo = y.mimeType.startsWith("video/");
+		const codecs = (y.mimeType.indexOf('codecs="') >= 0)
+			? y.mimeType.substring(y.mimeType.indexOf('codecs="') + 8).slice(0, -1)
+			: "";
+		const container = (y.mimeType.indexOf(';') >= 0) ? y.mimeType.substring(0, y.mimeType.indexOf(';')) : y.mimeType;
+		if (!_settings.allow_av1 && codecs.startsWith("av01"))
+			return null;
+		return {
+			itag: y.itag,
+			lastModified: (y.lastModified != null) ? String(y.lastModified) : "0",
+			xtags: y.xtags,
+			mimeType: container,
+			codecs: codecs,
+			bitrate: y.bitrate ?? 0,
+			width: y.width ?? 0,
+			height: y.height ?? 0,
+			fps: y.fps ?? 0,
+			audioChannels: y.audioChannels ?? 0,
+			audioSampleRate: y.audioSampleRate ? parseInt(y.audioSampleRate) : 0,
+			language: isVideo ? undefined : ytLangIdToLanguage(y.audioTrack?.id),
+			original: isVideo ? undefined : (hasOriginal
+				? ((y.audioTrack?.displayName?.toLowerCase()?.indexOf("original") ?? -1) >= 0)
+				: (y.audioTrack?.audioIsDefault ?? false)),
+			isDrc: !!y.isDrc
+		};
+	}
+
+	const videoFormats = adaptiveFormats.filter(x => x.mimeType.startsWith("video/")).map(mapFormat).filter(x => x != null);
+	const audioFormats = adaptiveFormats.filter(x => x.mimeType.startsWith("audio/")).map(mapFormat).filter(x => x != null);
+	if (videoFormats.length === 0 && audioFormats.length === 0) {
+		log("UMP descriptor skipped: no video/audio formats");
+		return undefined;
+	}
+
+	const bestVideo = videoFormats.reduce((a, b) => ((b.height ?? 0) > (a.height ?? 0) ? b : a), videoFormats[0] ?? { width: 0, height: 0 });
+
+	const bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
+	const useVideoIdPot = !!contextData?.playerConfig?.useVideoIdPot;
+	const videoId = contextData?.videoId ?? initialPlayerData?.videoDetails?.videoId ?? "";
+
+	const potState = { pot: getInitialPOTVideo(), pending: false };
+	function refreshPot(forceNew) {
+		if (potState.pending) return potState.promise;
+		potState.pending = true;
+		potState.promise = (useVideoIdPot
+			? tryGetPOTCustom(videoId, (pot) => pot, "UMP", forceNew)
+			: tryGetPOT(bgData, (pot) => pot, "UMP", forceNew))
+			.then((pot) => { if (pot) { potState.pot = pot; } potState.pending = false; return pot; },
+				(ex) => { potState.pending = false; log("UMP POT refresh failed: " + ex); return null; });
+		return potState.promise;
+	}
+
+	try {
+		await refreshPot(false);
+	} catch (ex) {
+		log("UMP initial POT failed: " + ex);
+	}
+
+	const source = new UMPSource({
+		name: "UMP " + ((bestVideo.height ?? 0) ? (bestVideo.height + "p") : "audio"),
+		url: abrStreamingUrl,
+		ustreamerConfig: ustreamerConfig,
+		videoId: videoId,
+		isLive: isLive,
+		duration: duration,
+		width: bestVideo.width ?? 0,
+		height: bestVideo.height ?? 0,
+		priority: true,
+		videoFormats: videoFormats,
+		audioFormats: audioFormats,
+		clientName: 1,
+		clientVersion: "2.20250923.08.00",
+		osName: "Windows",
+		osVersion: "10.0",
+		poToken: potState.pot
+	});
+
+	return new VideoSourceDescriptor([source]);
 }
 
 function extractAdaptiveFormats_VideoDescriptor_WithPOT(adaptiveSources, jsUrl, contextData, prefix, pot) {
