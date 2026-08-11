@@ -1370,7 +1370,11 @@ class YTSessionClient {
 }
 source.YTSessionClient = YTSessionClient;
 function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
-	if(!playerData?.videoDetails) return null;
+	if(!playerData?.videoDetails){ 
+		if(bridge.devSubmit)
+			bridge.devSubmit("extractVideoPlayerData_VideoDetails - No video found for " + contextData?.videoId, JSON.stringify(playerData));
+		return null;
+	}
 
 	if (IS_TESTING) {
 		console.log("playerData:", playerData);
