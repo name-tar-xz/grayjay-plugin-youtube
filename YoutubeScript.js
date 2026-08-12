@@ -1110,7 +1110,8 @@ class YTSessionClient {
 		}
 
 		if(!videoDetails) {
-			throw new UnavailableException("No video found for [" + videoId + "]");
+			const reason = extractText_String(playerData?.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.subreason)
+			throw new UnavailableException("No video found for [" + videoId + "]\n" + reason);
 		}
 
 		//#region Extract Streams
@@ -10124,6 +10125,8 @@ function convertIfShortUrl(url) {
 
 //#region Basic Extractors
 function extractText_String(item) {
+	if(item == null || item == undefined)
+		return null;
     if(typeof item === 'string')
         return item;
     if(item?.simpleText)
