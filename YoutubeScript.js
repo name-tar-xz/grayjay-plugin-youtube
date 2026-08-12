@@ -3217,7 +3217,7 @@ source.getChannelContents = (url, type, order, filters) => {
 		return new VideoPager([], false);
 	}
 	//throw new ScriptException("Could not find tab: " + targetTab);
-	log("Channel Result Count: " + tab?.videos?.length)
+	log("Channel Result Count: " + tab?.videos?.length);
 	return new RichGridPager(tab, contextData, useAuth, useAuth);
 };
 
@@ -9736,7 +9736,10 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 			}
 		}
 		const title = extractText_String(videoRenderer.metadata?.lockupMetadataViewModel?.title);
+		
 		if(!title)
+			return null;
+		if(!isLive && date == 0)
 			return null;
 
 			return new PlatformVideo({

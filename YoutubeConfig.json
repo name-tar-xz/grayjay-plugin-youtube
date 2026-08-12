@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 354,
+	"version": 356,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -449,6 +449,9 @@
 
 
 	"changelog": {
+		"356": [
+     		"Fix: Channels not showing new videos (when premiere is there)"
+     	],
 		"354": [
      		"Fix: PeekChannelResults fix for phones"
      	],
