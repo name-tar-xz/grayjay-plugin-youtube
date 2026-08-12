@@ -82,6 +82,7 @@ const REGEX_HUMAN_AGO = new RegExp("([0-9]+)\\s*([a-zA-Z]+)\\s+ago");
 const REGEX_VIEW_COUNT = new RegExp("([0-9,]+)[A-Z]? views");
 const REGEX_STREAMED = new RegExp("Streamed (.*)");
 const REGEX_SCHEDULED_FOR = new RegExp("Scheduled for (.*)");
+const REGEX_PREMIERES = new RegExp("Premieres (.*)");
 
 const REGEX_DATE_HUMAN = new RegExp("([A-Za-z]*) ([0-9]*), ([1-9][0-9][0-9][0-9])");
 const REGEX_DATE_ISO = new RegExp("([1-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])");
@@ -9647,6 +9648,12 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 						date = (parsedDate.getTime() - parsedDate.getTimezoneOffset() * 60 * 1000) / 1000;
 						continue;
 					}
+					const premieres = partText.match(REGEX_PREMIERES);
+					if(premieres) {
+						const parsedDate = new Date(new Date(premieres[1]).getTime() + (7*60*60 * 1000)) //Converted from display US West timezone.
+						date = (parsedDate.getTime() - parsedDate.getTimezoneOffset() * 60 * 1000) / 1000;
+						continue;
+					}
 				}
 			}
 			//Viewcount
@@ -9738,8 +9745,6 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 		const title = extractText_String(videoRenderer.metadata?.lockupMetadataViewModel?.title);
 		
 		if(!title)
-			return null;
-		if(!isLive && date == 0)
 			return null;
 
 			return new PlatformVideo({
@@ -10319,7 +10324,7 @@ function extractDate_Timestamp(dateStr) {
 
 	let matchDate = dateStr.match(REGEX_DATE_HUMAN);
 	if(matchDate) return extractHumanDate_Timestamp(matchDate.slice(1));
-	matchDate = dateStr.match(REGEX_DATE_EU);
+	matchDate = dateStr.match(REGEX_DATE_US);
 	if(matchDate) return new Date(matchDate[0]).getTime() / 1000;
 	matchDate = dateStr.match(REGEX_DATE_EU);
 	if(matchDate) return new Date(matchDate[0]).getTime() / 1000;
