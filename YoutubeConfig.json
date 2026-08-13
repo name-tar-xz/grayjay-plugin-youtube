@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://github.com/name-tar-xz/grayjay-plugin-youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 353,
+	"version": 356,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -448,9 +448,15 @@
 
 
 	"changelog": {
-                "353": [
-                        "Feature: Native UMP"
-                ],
+		"356": [
+     		"Fix: Channels not showing new videos (when premiere is there)"
+     	],
+		"354": [
+     		"Fix: PeekChannelResults fix for phones"
+     	],
+ 		"353": [
+         	"Feature: Native UMP"
+  		],
 		"343": [
 			"Fix: Live streams"
         ],

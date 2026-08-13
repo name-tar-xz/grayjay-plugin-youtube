@@ -82,6 +82,7 @@ const REGEX_HUMAN_AGO = new RegExp("([0-9]+)\\s*([a-zA-Z]+)\\s+ago");
 const REGEX_VIEW_COUNT = new RegExp("([0-9,]+)[A-Z]? views");
 const REGEX_STREAMED = new RegExp("Streamed (.*)");
 const REGEX_SCHEDULED_FOR = new RegExp("Scheduled for (.*)");
+const REGEX_PREMIERES = new RegExp("Premieres (.*)");
 
 const REGEX_DATE_HUMAN = new RegExp("([A-Za-z]*) ([0-9]*), ([1-9][0-9][0-9][0-9])");
 const REGEX_DATE_ISO = new RegExp("([1-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])");
@@ -1109,7 +1110,8 @@ class YTSessionClient {
 		}
 
 		if(!videoDetails) {
-			throw new UnavailableException("No video found for [" + videoId + "]");
+			const reason = extractText_String(playerData?.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.subreason)
+			throw new UnavailableException("No video found for [" + videoId + "]\n" + reason);
 		}
 
 		//#region Extract Streams
@@ -1370,7 +1372,11 @@ class YTSessionClient {
 }
 source.YTSessionClient = YTSessionClient;
 function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
-	if(!playerData?.videoDetails) return null;
+	if(!playerData?.videoDetails){ 
+		if(bridge.devSubmit)
+			bridge.devSubmit("extractVideoPlayerData_VideoDetails - No video found for " + contextData?.videoId, JSON.stringify(playerData));
+		return null;
+	}
 
 	if (IS_TESTING) {
 		console.log("playerData:", playerData);
@@ -3213,7 +3219,7 @@ source.getChannelContents = (url, type, order, filters) => {
 		return new VideoPager([], false);
 	}
 	//throw new ScriptException("Could not find tab: " + targetTab);
-	log("Channel Result Count: " + tab?.videos?.length)
+	log("Channel Result Count: " + tab?.videos?.length);
 	return new RichGridPager(tab, contextData, useAuth, useAuth);
 };
 
@@ -3283,18 +3289,28 @@ source.peekChannelContents = function(url, type, allowChannelFetch) {
 
     for(let entry of entryNodes) {
         const group = entry.children.find(x=>x.name == 'media:group');
-        const community = group.children.find(x=>x.name == "media:community");
+		let thumbnail = group.children.find(x=>x.name == 'media:thumbnail');
+        let community = group.children.find(x=>x.name == 'media:community');
+
+		if(!thumbnail)
+			thumbnail = findTag(group, "media:thumbnail");
+		if(!community)
+			community = findTag(group, "media:community");
+
+		let statistics = community?.children?.find(x=>x.name == "media:statistics");
+		if(!statistics && community)
+			statistics = findTag(community, "media:statistics");
 
         videos.push(new PlatformVideo({
 			id: new PlatformID(PLATFORM, entry.children.find(x=>x.name == 'yt:videoid').value, config.id),
 			name: escapeUnicode(group.children.find(x=>x.name == 'media:title').value),
 			thumbnails: new Thumbnails([
-			    new Thumbnail(group.children.find(x=>x.name == 'media:thumbnail')?.attributes["url"], 1)
+			    new Thumbnail(thumbnail?.attributes["url"], 1)
 			]),
 			author: author,
 			uploadDate: parseInt(new Date(entry.children.find(x=>x.name == "updated").value).getTime() / 1000),
 			duration: 0,
-			viewCount: parseInt(community.children.find(x=>x.name == "media:statistics").attributes["views"]) ?? 0,
+			viewCount: (statistics) ? (parseInt(statistics.attributes["views"]) ?? 0) : 0,
 			url: entry.children.find(x=>x.name == "link").attributes["href"],
 			isLive: false
 		}));
@@ -3302,6 +3318,18 @@ source.peekChannelContents = function(url, type, allowChannelFetch) {
 
     return videos;
 };
+function findTag(node, tagName) {
+	if(node.name == tagName)
+		return node;
+	if(!node.children)
+		return undefined;
+	for(let child of node.children) {
+		const found = findTag(child, tagName);
+		if(found)
+			return found;
+	}
+	return undefined;
+}
 
 source.searchPlaylists = function(query, type, order, filters) {
     const data = requestSearch(query, false, SEARCH_PLAYLISTS_PARAM);
@@ -9621,6 +9649,12 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 						date = (parsedDate.getTime() - parsedDate.getTimezoneOffset() * 60 * 1000) / 1000;
 						continue;
 					}
+					const premieres = partText.match(REGEX_PREMIERES);
+					if(premieres) {
+						const parsedDate = new Date(new Date(premieres[1]).getTime() + (7*60*60 * 1000)) //Converted from display US West timezone.
+						date = (parsedDate.getTime() - parsedDate.getTimezoneOffset() * 60 * 1000) / 1000;
+						continue;
+					}
 				}
 			}
 			//Viewcount
@@ -9710,6 +9744,7 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 			}
 		}
 		const title = extractText_String(videoRenderer.metadata?.lockupMetadataViewModel?.title);
+		
 		if(!title)
 			return null;
 
@@ -10090,6 +10125,8 @@ function convertIfShortUrl(url) {
 
 //#region Basic Extractors
 function extractText_String(item) {
+	if(item == null || item == undefined)
+		return null;
     if(typeof item === 'string')
         return item;
     if(item?.simpleText)
@@ -10290,7 +10327,7 @@ function extractDate_Timestamp(dateStr) {
 
 	let matchDate = dateStr.match(REGEX_DATE_HUMAN);
 	if(matchDate) return extractHumanDate_Timestamp(matchDate.slice(1));
-	matchDate = dateStr.match(REGEX_DATE_EU);
+	matchDate = dateStr.match(REGEX_DATE_US);
 	if(matchDate) return new Date(matchDate[0]).getTime() / 1000;
 	matchDate = dateStr.match(REGEX_DATE_EU);
 	if(matchDate) return new Date(matchDate[0]).getTime() / 1000;
