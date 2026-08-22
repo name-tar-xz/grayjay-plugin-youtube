@@ -138,7 +138,7 @@
 			"name": "Enable Android VR Streams",
 			"description": "Attempts to use Android VR streams as an additional fallback if available. May not always be available.",
 			"type": "Boolean",
-			"default": "true"
+			"default": "false"
 		},
 		{
 			"variable": "useiOS",
