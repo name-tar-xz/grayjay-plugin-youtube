@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 356,
+	"version": 357,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -402,7 +402,7 @@
 			"name": "Native UMP Player (Experimental)",
 			"description": "Play VOD through the native SABR/UMP player instead of the generated DASH path",
 			"type": "Boolean",
-			"default": "false",
+			"default": "true",
 			"isAdvanced": "true"
 		},
 		{
