@@ -106,11 +106,12 @@ const IOS_APP_VERSION = "19.14.3"
 const IOS_DEVICE_VERSION = "iPhone15,4"
 const IOS_OS_VERSION = "17_4_1"
 const IOS_OS_VERSION_DETAILED = "17.4.1.21E237"
-const USER_AGENT_IOS = "com.google.ios.youtube/" + IOS_APP_VERSION + "(" + IOS_DEVICE_VERSION + "; U; CPU iOS " + IOS_OS_VERSION + " like Mac OS X; US)";
 
+const USER_AGENT_IOS = "com.google.ios.youtube/" + IOS_APP_VERSION + "(" + IOS_DEVICE_VERSION + "; U; CPU iOS " + IOS_OS_VERSION + " like Mac OS X; US)";
 const USER_AGENT_ANDROID = "com.google.android.youtube/17.31.35 (Linux; U; Android 12; US) gzip";
 const USER_AGENT_ANDROID_VR = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; en_US; Quest 3 Build/SQ3A.220605.009.A1) gzip";
 const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.0 Safari/537.36";
+const USER_AGENT_VISIONOS = "com.google.visionos.youtube/1.04 (RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US) gzip";
 
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
@@ -119,6 +120,7 @@ let USE_ANDROID_VR_LIVE_FALLBACK = true;
 const USE_IOS_VIDEOS_FALLBACK = true;
 const USE_ANDROID_VIDEOS_FALLBACK = true;
 const USE_ANDROID_VR_VIDEOS_FALLBACK = true;
+const USE_VISIONOS_VIDEOS_FALLBACK = true;
 const USE_TV_VIDEOS_FALLBACK = false;
 
 let USE_ABR_VIDEOS = false;
@@ -206,6 +208,21 @@ const clients = {
 			"gl":"US",
 			"utcOffsetMinutes":0
 		}
+	},
+	VISIONOS: {
+		UserAgent: USER_AGENT_VISIONOS,
+		Version: "1.04",
+		ClientName: 101,
+
+		ContextClient: {
+			"clientName": "VISIONOS",
+			"clientVersion": "1.04",
+			"deviceMake": "Apple",
+			"deviceModel": "RealityDevice17,1",
+			"userAgent": USER_AGENT_VISIONOS,
+			"osName": "visionOS",
+			"osVersion": "26.6.0"
+		} 
 	}
 }
 
@@ -1021,21 +1038,26 @@ class YTSessionClient {
 		else batch = batch.DUMMY();
 
 		//Request: iOS Streaming Data [4]
-		if(!USE_ABR_VIDEOS && !simplify)
+		if(!USE_ABR_VIDEOS && !simplify && false)
 			batch = requestIOSStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
 
 		//Request: Android Streaming Data [5]
-		if(!USE_ABR_VIDEOS && !simplify)
+		if(!USE_ABR_VIDEOS && !simplify && false)
 			batch = requestAndroidShortStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
 
 		//Request: Android VR Streaming Data [6]
-		if(!USE_ABR_VIDEOS && !simplify)
+		if(!USE_ABR_VIDEOS && !simplify && false)
 			batch = requestAndroidVRStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
 
-		let [respPlayerData, respInitialData, respDislikes, respDeArrow, respiOS, respAndroid, respAndroidVR] = batch.execute();
+		//Request: VisionOS Streaming Data [7]
+		if(!USE_ABR_VIDEOS && !simplify)
+			batch = requestVisionOSStreamingData(videoId, batch, context.bgData, useLogin);
+		else batch = batch.DUMMY();
+
+		let [respPlayerData, respInitialData, respDislikes, respDeArrow, respiOS, respAndroid, respAndroidVR, respVisionOS] = batch.execute();
 		//#endregion
 
 		//#region Video Data
@@ -1179,6 +1201,30 @@ class YTSessionClient {
 					}
 				}
 				//#endregion
+
+				//#region VisionOS
+				if(!videoDetails.video && !forceUmp && USE_VISIONOS_VIDEOS_FALLBACK && respVisionOS && !!_settings.useVisionOS) {
+					if(respVisionOS.isOk) {
+						let visionOSData = JSON.parse(respVisionOS.body);
+						if(visionOSData.playerResponse)
+							visionOSData = visionOSData.playerResponse;
+
+						if(IS_TESTING)
+							console.log("VisionOS Streaming Data", visionOSData);
+
+						if(visionOSData?.streamingData?.adaptiveFormats) {
+							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(visionOSData.streamingData.adaptiveFormats, context.jsUrl, contextData, "VisionOS ");
+
+							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+								videoDetails.video = newDescriptor;
+								if(!!_settings["showVerboseToasts"])
+									bridge.toast("Using VisionOS sources");
+							}
+							else
+								log("VISIONOS PLAYBACK VERIFICATION FAILED, FALLBACK");
+						}
+					}
+				}
 
 				if(!videoDetails.video && canUseNativeUMP()) {
 					try {
@@ -6301,6 +6347,9 @@ class YTRequestModifier extends RequestModifier {
 				case "IOS":
 					headers["User-Agent"] = USER_AGENT_IOS;
 					break;
+				case "VISIONOS":
+					headers["User-Agent"] = USER_AGENT_VISIONOS;
+					break;
 				default:
 					headers["User-Agent"] = USER_AGENT_WINDOWS;
 					break;
@@ -7468,6 +7517,63 @@ function requestAndroidVRStreamingData(videoId, batch, visitorData, useLogin) {
 	const headers = {
 		"Content-Type": "application/json",
 		"User-Agent": USER_AGENT_ANDROID_VR,
+		"X-Goog-Api-Format-Version": "2",
+		"Accept-Language": "en-US, en;q=0.9"
+	};
+
+	const token = randomString(12);
+	const clientContext = getClientContext(false);
+	const url = URL_PLAYER +
+		"?key=" + clientContext.INNERTUBE_API_KEY +
+		"&prettyPrint=false" +
+		"&t=" + token +
+		"&id=" + videoId
+
+	if(batch) {
+		return batch.POST(url, JSON.stringify(body), headers, !!useLogin);
+	}
+	else {
+		const resp = http.POST(url, JSON.stringify(body), headers, !!useLogin);
+		return resp;
+	}
+}
+function requestVisionOSStreamingData(videoId, batch, visitorData, useLogin) {
+	const body = {
+		videoId: videoId,
+		cpn: "" + randomString(16),
+		contentCheckOk: "true",
+		racyCheckOn: "true",
+		context: {
+			client: {
+				"clientName": clients.VISIONOS.ContextClient.clientName,
+				"clientVersion": clients.VISIONOS.ContextClient.clientVersion,
+				"deviceMake": clients.VISIONOS.ContextClient.deviceMake,
+				"deviceModel": clients.VISIONOS.ContextClient.deviceModel,
+				//"platform": "MOBILE",
+				"osName": clients.VISIONOS.ContextClient.osName,
+				"osVersion": clients.VISIONOS.ContextClient.osVersion,
+				"hl": langDisplay,
+				"gl": langRegion,
+				"utcOffsetMinutes": 0
+			},
+			user: {
+				"lockedSafetyMode": false
+			}
+		}
+	};
+	const visitorToken = visitorData?.visitorData ?? visitorData?.dataSyncId;
+	if(visitorToken && !useLogin) {
+		body.context.client.visitorData = visitorToken;
+	}
+	else if(visitorData?.visitorDataLogin && useLogin){
+		body.context.client.visitorData = visitorData?.visitorDataLogin;
+	}
+	else if(visitorData?.dataSyncId && useLogin) {
+		body.context.client.datasyncId = visitorData?.dataSyncId;
+	}
+	const headers = {
+		"Content-Type": "application/json",
+		"User-Agent": USER_AGENT_VISIONOS,
 		"X-Goog-Api-Format-Version": "2",
 		"Accept-Language": "en-US, en;q=0.9"
 	};

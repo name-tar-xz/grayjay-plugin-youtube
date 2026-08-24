@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 357,
+	"version": 358,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 
@@ -117,6 +117,13 @@
 			"description": "Attempts to use Android VR streams as an additional fallback if available. May not always be available.",
 			"type": "Boolean",
 			"default": "false"
+		},
+		{
+			"variable": "useVisionOS",
+			"name": "Enable VisionOS Streams",
+			"description": "Attempts to use VisionOS streams if available, may be smoother experience. May not always be available.",
+			"type": "Boolean",
+			"default": "true"
 		},
 		{
 			"variable": "useiOS",
@@ -423,6 +430,9 @@
 	"primaryClaimFieldType": 1,
 
 	"changelog": {
+		"358": [
+     		"Feature/Fix: VisionOS streaming sources support"
+     	],
 		"356": [
      		"Fix: Channels not showing new videos (when premiere is there)"
      	],
