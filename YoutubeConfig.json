@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 358,
+	"version": 359,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -94,6 +94,13 @@
 			"variable": "youtubeActivity",
 			"name": "Provide Youtube Activity",
 			"description": "Use authenticated client for playback, telling Youtube what you watched.",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "notifyAIContent",
+			"name": "Notify On AI Content",
+			"description": "Show a message when you open a video marked as AI content.",
 			"type": "Boolean",
 			"default": "false"
 		},
@@ -435,6 +442,10 @@
 
 
 	"changelog": {
+		"359": [
+     		"Fix: Shorts fix",
+			"Feature: Optional setting to show AI disclosure when opening AI video."
+     	],
 		"358": [
      		"Feature/Fix: VisionOS streaming sources support"
      	],

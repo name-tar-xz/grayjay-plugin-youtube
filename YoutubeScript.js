@@ -1412,6 +1412,10 @@ class YTSessionClient {
 			}
 		}
 
+		if(_settings?.notifyAIContent && videoDetails?.isAI) {
+			bridge.toast("AI Marked Content:\n" + videoDetails.name);
+		}
+
 		log("getContentDetails Succeeded");
 		return videoDetails;
 	}
@@ -1419,7 +1423,7 @@ class YTSessionClient {
 source.YTSessionClient = YTSessionClient;
 function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 	if(!playerData?.videoDetails){ 
-		if(bridge.devSubmit)
+		if(bridge.devSubmit && playerData)
 			bridge.devSubmit("extractVideoPlayerData_VideoDetails - No video found for " + contextData?.videoId, JSON.stringify(playerData));
 		return null;
 	}
@@ -2601,6 +2605,14 @@ function extractVideoDetailsInitialData_TwoColumn_Metadata(initialData, knownDat
 						date = extractDate_Timestamp(renderer.dateText.simpleText);
 
 					video.datetime = date;
+				}
+
+				if(renderer.badges && renderer.badges.length) {
+					for(let badge of renderer.badges) {
+						if(badge?.metadataBadgeRenderer?.label == "AI") {
+							video.isAI = true;
+						}
+					}
 				}
 			},
 			videoSecondaryInfoRenderer(renderer) {
@@ -6750,7 +6762,7 @@ function extractReelItemWatch_VideoAndContinuation(json) {
 	});
 	const endpointVideo = extractReelWatchEndpoint_Video(endpoint);
 
-	const metadataItems = json?.overlay?.reelPlayerOverlayRenderer?.metapanel?.reelMetapanelViewModel?.metadataItems ?? [];
+	let metadataItems = json?.overlay?.reelPlayerOverlayRenderer?.metapanel?.reelMetapanelViewModel?.metadataItems ?? json?.overlay?.reelPlayerOverlayRenderer?.playerOverlay?.reelPlayerOverlayViewModel?.metapanel?.reelMetapanelViewModel?.metadataItems ?? [];
 	for(let metadataItem of metadataItems) {
 		switchKey(metadataItem, {
 			reelChannelBarViewModel(renderer) {
@@ -8166,6 +8178,14 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 						date = extractDate_Timestamp(renderer.dateText.simpleText);
 
 					video.datetime = date;
+				}
+				
+				if(renderer.badges && renderer.badges.length) {
+					for(badge of renderer.badges) {
+						if(badge?.metadataBadgeRenderer?.label == "AI") {
+							video.isAI = true;
+						}
+					}
 				}
 			},
 			videoSecondaryInfoRenderer(renderer) {
