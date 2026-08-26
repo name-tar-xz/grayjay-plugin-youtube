@@ -50,6 +50,9 @@ const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 const CIPHER_TEST_HASHES = ["99f55c01", "4eecba16", "4e51e895", "3510b6ff", "5d93cfdb", "3062cec8", "bce13099", "e237d4c5", "87644c66", "bcd893b3", "6956a038", "17ad44a3", "29a37ef6", "81567a87", "475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
+function getJsUrlHash(jsUrl) {
+	return _jsUrlScripts[jsUrl] ? utility.md5String(_jsUrlScripts[jsUrl]) : jsUrl;
+}
 
 const PLATFORM = "YouTube";
 const PLATFORM_CLAIMTYPE = 2;
@@ -825,7 +828,7 @@ source.isContentDetailsUrl = (url) => {
 function ensureSts(sts, jsUrl, location = undefined) {
 	if(!sts || isNaN(sts)) {
 		//if(bridge.devSubmit) bridge.devSubmit(`prepareCipher - Failed to extract sts (${location})\n` + jsUrl, codeUsed ?? "No code fetched");
-		throw new ScriptException(`Failed to extract sts (${location}): ${jsUrl}`);
+		throw new ScriptException(`Failed to extract sts (${location}): ${getJsUrlHash(jsUrl)}`);
 	}
 }
 
@@ -10838,26 +10841,26 @@ function decryptUrlN(url, jsUrl, doLogging, outObj) {
 }
 function decodeCipher(cipher, jsUrl) {
 	if(!_cipherDecode[jsUrl])
-		throw new ScriptException("Cipher decoder was not available [" + jsUrl + "]");
+		throw new ScriptException("Cipher decoder was not available [" + getJsUrlHash(jsUrl) + "]");
 	try {
 		return _cipherDecode[jsUrl](cipher);
 	}
 	catch(ex) {
 		log("decryptSig failed: " + ex);
 	    if(bridge.devSubmit) bridge.devSubmit("decryptSig - failed due to: " + ex, "//" + jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
-		throw new ScriptException("decryptSig - failed due to: " + ex + "\n" + jsUrl);
+		throw new ScriptException("decryptSig - failed due to: " + ex + "\n" + getJsUrlHash(jsUrl));
 	}
 }
 function decryptN(encryptedN, jsUrl) {
 	if(!_nDecrypt[jsUrl])
-		throw new ScriptException("N Decryptor was not available [" + jsUrl + "]");
+		throw new ScriptException("N Decryptor was not available [" + getJsUrlHash(jsUrl) + "]");
 	try {
 		return _nDecrypt[jsUrl](encryptedN);
 	}
 	catch(ex) {
 		log("decryptN failed: " + ex);
 	    if(bridge.devSubmit) bridge.devSubmit("decryptN - failed due to: " + ex, "//" + jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
-		throw new ScriptException("decryptN - failed due to: " + ex + "\n" + jsUrl);
+		throw new ScriptException("decryptN - failed due to: " + ex + "\n" + getJsUrlHash(jsUrl));
 	}
 }
 function testCipher(hash, codeOverride) {
@@ -10874,7 +10877,7 @@ function testCipher(hash, codeOverride) {
 
 		const codeRaw = playerCodeResp.body;
 		if (!codeRaw || codeRaw.length < 100)
-			throw new ScriptException("No player code found?\n" + jsUrl);
+			throw new ScriptException("No player code found?\n" + getJsUrlHash(jsUrl));
 
 		prepareCipher(jsUrl, codeRaw);
 
@@ -10976,7 +10979,7 @@ function prepareCipher(jsUrl, codeOverride) {
 		codeUsed = playerCode;
 
 		if(!playerCode || !playerCode.length || playerCode.length < 100)
-			throw new ScriptException("No player code found?\n" + jsUrl);
+			throw new ScriptException("No player code found?\n" + getJsUrlHash(jsUrl));
 
 		_jsUrlScripts[jsUrl] = playerCode;
 
@@ -11006,7 +11009,7 @@ function prepareCipher(jsUrl, codeOverride) {
 			throw ex;
 		}
         if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error:" + ex + "\nMake sure you have the latest Youtube plugin version.\n" + jsUrl, codeUsed ?? "No code fetched");
-		throw new ScriptException("Failed to get Cipher due to: " + ex + "\n" + jsUrl);
+		throw new ScriptException("Failed to get Cipher due to: " + ex + "\n" + getJsUrlHash(jsUrl));
 	}
 }
 function prepareCipherPlayer(jsUrl, codeUsed, codeRaw) {
@@ -11014,8 +11017,8 @@ function prepareCipherPlayer(jsUrl, codeUsed, codeRaw) {
 			//bridge.toast("Falling back to virtualized player");
 			log("Using Cipher Player!!!");
 			const playerVirt = getVirtualizedPlayer(jsUrl, codeUsed, undefined, undefined, codeRaw);
-			_cipherDecode[jsUrl] = playerVirt.decryptSig ?? function(){throw "Not implemented (decryptSig) for " + jsUrl; }
-			_nDecrypt[jsUrl] = playerVirt.decryptN ?? function(){throw "Not implemented (decryptN) for " + jsUrl; }
+			_cipherDecode[jsUrl] = playerVirt.decryptSig ?? function(){throw "Not implemented (decryptSig) for " + getJsUrlHash(jsUrl); }
+			_nDecrypt[jsUrl] = playerVirt.decryptN ?? function(){throw "Not implemented (decryptN) for " + getJsUrlHash(jsUrl); }
 
 			const stsMatch = codeUsed.match(STS_REGEX);
 			console.log("stsMatch: " + stsMatch);
@@ -11155,7 +11158,7 @@ source.getVirtualizedPlayer = function(hash, codeOverride, extracts, noDecrypts)
 	}
 	console.log("Javascript Url: " + URL_BASE + jsUrl);
 	let playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
-
+	_jsUrlScripts[jsUrl] = playerCode;
 
 	let constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
 	if (!constantsMatch) {
@@ -11207,11 +11210,11 @@ function findNDecryptorFunction(jsUrl, code, codeRaw) {
 		return nDecryptDescs[jsUrl];
 
 	if (!codeRaw)
-		throw new ScriptException("Remote n decryptor requires raw player code: " + jsUrl);
+		throw new ScriptException("Remote n decryptor requires raw player code: " + getJsUrlHash(jsUrl));
 
 	const solution = findRemoteSolution(jsUrl, codeRaw);
 	if (!(solution && solution.status === 1 && solution.solutionN))
-		throw new ScriptException("Remote n decryptor unavailable: " + jsUrl);
+		throw new ScriptException("Remote n decryptor unavailable: " + getJsUrlHash(jsUrl));
 
 	nDecryptDescs[jsUrl] = rewriteRemoteSolution(solution.solutionN);
 	return nDecryptDescs[jsUrl];
@@ -11249,9 +11252,6 @@ function rewriteRemoteSolution(solution) {
 	}
 }
 function findRemoteSolution(jsUrl, codeRaw) {
-	const jsUrlHashMatch = (/\/s\/player\/([a-zA-Z0-9]+)\//g).exec(jsUrl);
-	const jsUrlHash = (jsUrlHashMatch) ? jsUrlHashMatch[1] : jsUrl;
-
 	console.log("Using remote solver for " + jsUrl);
 	log("Using remote solver for " + jsUrl);
 
@@ -11260,7 +11260,7 @@ function findRemoteSolution(jsUrl, codeRaw) {
 		bridge.toast("Remote solution hash: " + md5Hash);
 	let solution = getRemoteSolution(md5Hash);
 	if(!solution)
-		throw new ScriptException("Failed to remote solve [" + jsUrlHash + "] no solution?");
+		throw new ScriptException("Failed to remote solve [" + md5Hash + "] no solution?");
 
 	if(solution.status == 99) {
 		log("Remote solver starting new job");
@@ -11274,8 +11274,8 @@ function findRemoteSolution(jsUrl, codeRaw) {
 			return solution;
 		case 2:
 			remoteSolutions[md5Hash] = undefined;
-			console.log("Failed to remote solve [" + jsUrlHash + "] cached: " + solution.error);
-			throw new ScriptException("Failed to remote solve [" + jsUrlHash + "] cached: " + solution.error);
+			console.log("Failed to remote solve [" + md5Hash + "] cached: " + solution.error);
+			throw new ScriptException("Failed to remote solve [" + md5Hash + "] cached: " + solution.error);
 		case 0:
 			for(let i = 0; i < 15; i++) {
 				log("Remote solver waiting..");
@@ -11287,23 +11287,20 @@ function findRemoteSolution(jsUrl, codeRaw) {
 						return newSolution;
 					case 2:
 						remoteSolutions[md5Hash] = undefined;
-						throw new ScriptException("Failed remote solver [" + jsUrlHash + "]:" + newSolution.error);
+						throw new ScriptException("Failed remote solver [" + md5Hash + "]:" + newSolution.error);
 					default:
 						continue;
 				}
 			}
-			console.log("Failed remote solver timed out [" + jsUrlHash + "]")
-			throw new ScriptException("Failed remote solver timed out [" + jsUrlHash + "]");
+			console.log("Failed remote solver timed out [" + md5Hash + "]")
+			throw new ScriptException("Failed remote solver timed out [" + md5Hash + "]");
 		default:
-			console.log("Failed remote solver invalid status code [" + jsUrlHash + "]")
-			throw new ScriptException("Failed remote solver invalid status code [" + jsUrlHash + "]");
+			console.log("Failed remote solver invalid status code [" + md5Hash + "]")
+			throw new ScriptException("Failed remote solver invalid status code [" + md5Hash + "]");
 	}
 }
 
 function startRemoteSolution(md5Hash, jsUrl, codeRaw) {
-	const jsUrlHashMatch = (/\/s\/player\/([a-zA-Z0-9]+)\//g).exec(jsUrl);
-	const jsUrlHash = (jsUrlHashMatch) ? jsUrlHashMatch[1] : jsUrl;
-
 	if(!!remoteSolutions[md5Hash] && remoteSolutions[md5Hash].status !== 0)
 		return remoteSolutions[md5Hash];
 	
@@ -11314,7 +11311,7 @@ function startRemoteSolution(md5Hash, jsUrl, codeRaw) {
 
 	if(jobResponse && jobResponse.isOk)
 		return JSON.parse(jobResponse.body);
-	throw new ScriptException("Failed to start remote solver [" + jsUrlHash + "] (" + jobResponse?.code + ")");
+	throw new ScriptException("Failed to start remote solver [" + md5Hash + "] (" + jobResponse?.code + ")");
 }
 function getFastCachedSolution(md5Hash) {
 	const response = http.GET(URL_SOLUTIONS + md5Hash, {}, false);
