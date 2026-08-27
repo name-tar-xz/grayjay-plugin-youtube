@@ -1292,6 +1292,27 @@ class YTSessionClient {
 						}
 					}
 				}
+				if(!videoDetails.live && !forceUmp && USE_VISIONOS_VIDEOS_FALLBACK && respVisionOS && !!_settings.useVisionOS) {
+					if(respVisionOS.isOk) {
+						let visionOSData = JSON.parse(respVisionOS.body);
+						if(visionOSData.playerResponse)
+							visionOSData = visionOSData.playerResponse;
+
+						if(IS_TESTING)
+							console.log("VisionOS Streaming Data", visionOSData);
+
+						if(visionOSData?.streamingData?.hlsManifestUrl) {
+							log("Using VisionOS HLS substitute");
+							const source = new HLSSource({
+								name: "HLS (VisionOS)",
+								url: decryptUrlN(visionOSData?.streamingData?.hlsManifestUrl, context.jsUrl)
+							});
+							videoDetails.hls = source;
+							videoDetails.live = source;
+							videoDetails.video = new VideoSourceDescriptor([source]);
+						}
+					}
+				}
 
 				if(!videoDetails.live) {
 					const plannedDate = videoDetails.datetime ? new Date(videoDetails.datetime * 1000) : null;
