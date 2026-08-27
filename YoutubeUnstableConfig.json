@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://github.com/name-tar-xz/grayjay-plugin-youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 357,
+	"version": 359,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 
@@ -75,6 +75,13 @@
 			"default": "false"
 		},
 		{
+			"variable": "notifyAIContent",
+			"name": "Notify On AI Content",
+			"description": "Show a message when you open a video marked as AI content.",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
 			"variable": "channelRssOnly",
 			"name": "Only Use Channel RSS Feeds (Inferior)",
 			"description": "Exclusively use channel RSS feeds for channel content, may result in inferior results, and only recent videos. But may be faster and reduce rate limiting.",
@@ -104,23 +111,9 @@
 			"default": "false"
 		},
 		{
-			"variable": "useAndroid",
-			"name": "Enable Android Streams",
-			"description": "Attempts to use Android streams if available, may be smoother experience. May not always be available.",
-			"type": "Boolean",
-			"default": "true"
-		},
-		{
-			"variable": "useAndroidVR",
-			"name": "Enable Android VR Streams",
-			"description": "Attempts to use Android VR streams as an additional fallback if available. May not always be available.",
-			"type": "Boolean",
-			"default": "false"
-		},
-		{
-			"variable": "useiOS",
-			"name": "Enable iOS Streams",
-			"description": "Attempts to use iOS streams if available, may be smoother experience. May not always be available.",
+			"variable": "useVisionOS",
+			"name": "Enable VisionOS Streams",
+			"description": "Attempts to use VisionOS streams if available, may be smoother experience. May not always be available.",
 			"type": "Boolean",
 			"default": "true"
 		},
@@ -422,6 +415,13 @@
 	"primaryClaimFieldType": 1,
 
 	"changelog": {
+		"359": [
+     		"Fix: Shorts fix",
+			"Feature: Optional setting to show AI disclosure when opening AI video."
+     	],
+		"358": [
+     		"Feature/Fix: VisionOS streaming sources support"
+     	],
 		"356": [
      		"Fix: Channels not showing new videos (when premiere is there)"
      	],

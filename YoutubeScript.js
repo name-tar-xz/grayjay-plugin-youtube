@@ -50,6 +50,9 @@ const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 const CIPHER_TEST_HASHES = ["99f55c01", "4eecba16", "4e51e895", "3510b6ff", "5d93cfdb", "3062cec8", "bce13099", "e237d4c5", "87644c66", "bcd893b3", "6956a038", "17ad44a3", "29a37ef6", "81567a87", "475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
+function getJsUrlHash(jsUrl) {
+	return _jsUrlScripts[jsUrl] ? utility.md5String(_jsUrlScripts[jsUrl]) : jsUrl;
+}
 
 const PLATFORM = "YouTube";
 const PLATFORM_CLAIMTYPE = 2;
@@ -106,11 +109,12 @@ const IOS_APP_VERSION = "19.14.3"
 const IOS_DEVICE_VERSION = "iPhone15,4"
 const IOS_OS_VERSION = "17_4_1"
 const IOS_OS_VERSION_DETAILED = "17.4.1.21E237"
-const USER_AGENT_IOS = "com.google.ios.youtube/" + IOS_APP_VERSION + "(" + IOS_DEVICE_VERSION + "; U; CPU iOS " + IOS_OS_VERSION + " like Mac OS X; US)";
 
+const USER_AGENT_IOS = "com.google.ios.youtube/" + IOS_APP_VERSION + "(" + IOS_DEVICE_VERSION + "; U; CPU iOS " + IOS_OS_VERSION + " like Mac OS X; US)";
 const USER_AGENT_ANDROID = "com.google.android.youtube/17.31.35 (Linux; U; Android 12; US) gzip";
 const USER_AGENT_ANDROID_VR = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; en_US; Quest 3 Build/SQ3A.220605.009.A1) gzip";
 const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.0 Safari/537.36";
+const USER_AGENT_VISIONOS = "com.google.visionos.youtube/1.04 (RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US) gzip";
 
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
@@ -119,6 +123,7 @@ let USE_ANDROID_VR_LIVE_FALLBACK = true;
 const USE_IOS_VIDEOS_FALLBACK = true;
 const USE_ANDROID_VIDEOS_FALLBACK = true;
 const USE_ANDROID_VR_VIDEOS_FALLBACK = true;
+const USE_VISIONOS_VIDEOS_FALLBACK = true;
 const USE_TV_VIDEOS_FALLBACK = false;
 
 let USE_ABR_VIDEOS = false;
@@ -206,6 +211,21 @@ const clients = {
 			"gl":"US",
 			"utcOffsetMinutes":0
 		}
+	},
+	VISIONOS: {
+		UserAgent: USER_AGENT_VISIONOS,
+		Version: "1.04",
+		ClientName: 101,
+
+		ContextClient: {
+			"clientName": "VISIONOS",
+			"clientVersion": "1.04",
+			"deviceMake": "Apple",
+			"deviceModel": "RealityDevice17,1",
+			"userAgent": USER_AGENT_VISIONOS,
+			"osName": "visionOS",
+			"osVersion": "26.6.0"
+		} 
 	}
 }
 
@@ -825,7 +845,7 @@ source.isContentDetailsUrl = (url) => {
 function ensureSts(sts, jsUrl, location = undefined) {
 	if(!sts || isNaN(sts)) {
 		//if(bridge.devSubmit) bridge.devSubmit(`prepareCipher - Failed to extract sts (${location})\n` + jsUrl, codeUsed ?? "No code fetched");
-		throw new ScriptException(`Failed to extract sts (${location}): ${jsUrl}`);
+		throw new ScriptException(`Failed to extract sts (${location}): ${getJsUrlHash(jsUrl)}`);
 	}
 }
 
@@ -1021,21 +1041,26 @@ class YTSessionClient {
 		else batch = batch.DUMMY();
 
 		//Request: iOS Streaming Data [4]
-		if(!USE_ABR_VIDEOS && !simplify)
+		if(!USE_ABR_VIDEOS && !simplify && false)
 			batch = requestIOSStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
 
 		//Request: Android Streaming Data [5]
-		if(!USE_ABR_VIDEOS && !simplify)
+		if(!USE_ABR_VIDEOS && !simplify && false)
 			batch = requestAndroidShortStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
 
 		//Request: Android VR Streaming Data [6]
-		if(!USE_ABR_VIDEOS && !simplify)
+		if(!USE_ABR_VIDEOS && !simplify && false)
 			batch = requestAndroidVRStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
 
-		let [respPlayerData, respInitialData, respDislikes, respDeArrow, respiOS, respAndroid, respAndroidVR] = batch.execute();
+		//Request: VisionOS Streaming Data [7]
+		if(!USE_ABR_VIDEOS && !simplify)
+			batch = requestVisionOSStreamingData(videoId, batch, context.bgData, useLogin);
+		else batch = batch.DUMMY();
+
+		let [respPlayerData, respInitialData, respDislikes, respDeArrow, respiOS, respAndroid, respAndroidVR, respVisionOS] = batch.execute();
 		//#endregion
 
 		//#region Video Data
@@ -1179,6 +1204,30 @@ class YTSessionClient {
 					}
 				}
 				//#endregion
+
+				//#region VisionOS
+				if(!videoDetails.video && !forceUmp && USE_VISIONOS_VIDEOS_FALLBACK && respVisionOS && !!_settings.useVisionOS) {
+					if(respVisionOS.isOk) {
+						let visionOSData = JSON.parse(respVisionOS.body);
+						if(visionOSData.playerResponse)
+							visionOSData = visionOSData.playerResponse;
+
+						if(IS_TESTING)
+							console.log("VisionOS Streaming Data", visionOSData);
+
+						if(visionOSData?.streamingData?.adaptiveFormats) {
+							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(visionOSData.streamingData.adaptiveFormats, context.jsUrl, contextData, "VisionOS ");
+
+							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+								videoDetails.video = newDescriptor;
+								if(!!_settings["showVerboseToasts"])
+									bridge.toast("Using VisionOS sources");
+							}
+							else
+								log("VISIONOS PLAYBACK VERIFICATION FAILED, FALLBACK");
+						}
+					}
+				}
 
 				if(!videoDetails.video && canUseNativeUMP()) {
 					try {
@@ -1366,6 +1415,10 @@ class YTSessionClient {
 			}
 		}
 
+		if(_settings?.notifyAIContent && videoDetails?.isAI) {
+			bridge.toast("AI Marked Content:\n" + videoDetails.name);
+		}
+
 		log("getContentDetails Succeeded");
 		return videoDetails;
 	}
@@ -1373,7 +1426,7 @@ class YTSessionClient {
 source.YTSessionClient = YTSessionClient;
 function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 	if(!playerData?.videoDetails){ 
-		if(bridge.devSubmit)
+		if(bridge.devSubmit && playerData)
 			bridge.devSubmit("extractVideoPlayerData_VideoDetails - No video found for " + contextData?.videoId, JSON.stringify(playerData));
 		return null;
 	}
@@ -2555,6 +2608,14 @@ function extractVideoDetailsInitialData_TwoColumn_Metadata(initialData, knownDat
 						date = extractDate_Timestamp(renderer.dateText.simpleText);
 
 					video.datetime = date;
+				}
+
+				if(renderer.badges && renderer.badges.length) {
+					for(let badge of renderer.badges) {
+						if(badge?.metadataBadgeRenderer?.label == "AI") {
+							video.isAI = true;
+						}
+					}
 				}
 			},
 			videoSecondaryInfoRenderer(renderer) {
@@ -6301,6 +6362,9 @@ class YTRequestModifier extends RequestModifier {
 				case "IOS":
 					headers["User-Agent"] = USER_AGENT_IOS;
 					break;
+				case "VISIONOS":
+					headers["User-Agent"] = USER_AGENT_VISIONOS;
+					break;
 				default:
 					headers["User-Agent"] = USER_AGENT_WINDOWS;
 					break;
@@ -6701,7 +6765,7 @@ function extractReelItemWatch_VideoAndContinuation(json) {
 	});
 	const endpointVideo = extractReelWatchEndpoint_Video(endpoint);
 
-	const metadataItems = json?.overlay?.reelPlayerOverlayRenderer?.metapanel?.reelMetapanelViewModel?.metadataItems ?? [];
+	let metadataItems = json?.overlay?.reelPlayerOverlayRenderer?.metapanel?.reelMetapanelViewModel?.metadataItems ?? json?.overlay?.reelPlayerOverlayRenderer?.playerOverlay?.reelPlayerOverlayViewModel?.metapanel?.reelMetapanelViewModel?.metadataItems ?? [];
 	for(let metadataItem of metadataItems) {
 		switchKey(metadataItem, {
 			reelChannelBarViewModel(renderer) {
@@ -7488,6 +7552,63 @@ function requestAndroidVRStreamingData(videoId, batch, visitorData, useLogin) {
 		return resp;
 	}
 }
+function requestVisionOSStreamingData(videoId, batch, visitorData, useLogin) {
+	const body = {
+		videoId: videoId,
+		cpn: "" + randomString(16),
+		contentCheckOk: "true",
+		racyCheckOn: "true",
+		context: {
+			client: {
+				"clientName": clients.VISIONOS.ContextClient.clientName,
+				"clientVersion": clients.VISIONOS.ContextClient.clientVersion,
+				"deviceMake": clients.VISIONOS.ContextClient.deviceMake,
+				"deviceModel": clients.VISIONOS.ContextClient.deviceModel,
+				//"platform": "MOBILE",
+				"osName": clients.VISIONOS.ContextClient.osName,
+				"osVersion": clients.VISIONOS.ContextClient.osVersion,
+				"hl": langDisplay,
+				"gl": langRegion,
+				"utcOffsetMinutes": 0
+			},
+			user: {
+				"lockedSafetyMode": false
+			}
+		}
+	};
+	const visitorToken = visitorData?.visitorData ?? visitorData?.dataSyncId;
+	if(visitorToken && !useLogin) {
+		body.context.client.visitorData = visitorToken;
+	}
+	else if(visitorData?.visitorDataLogin && useLogin){
+		body.context.client.visitorData = visitorData?.visitorDataLogin;
+	}
+	else if(visitorData?.dataSyncId && useLogin) {
+		body.context.client.datasyncId = visitorData?.dataSyncId;
+	}
+	const headers = {
+		"Content-Type": "application/json",
+		"User-Agent": USER_AGENT_VISIONOS,
+		"X-Goog-Api-Format-Version": "2",
+		"Accept-Language": "en-US, en;q=0.9"
+	};
+
+	const token = randomString(12);
+	const clientContext = getClientContext(false);
+	const url = URL_PLAYER +
+		"?key=" + clientContext.INNERTUBE_API_KEY +
+		"&prettyPrint=false" +
+		"&t=" + token +
+		"&id=" + videoId
+
+	if(batch) {
+		return batch.POST(url, JSON.stringify(body), headers, !!useLogin);
+	}
+	else {
+		const resp = http.POST(url, JSON.stringify(body), headers, !!useLogin);
+		return resp;
+	}
+}
 function requestTvHtml5EmbedStreamingData(videoId, sts, bgData, withLogin = false, batch) {
 	const body = {
 		videoId: videoId,
@@ -8060,6 +8181,14 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 						date = extractDate_Timestamp(renderer.dateText.simpleText);
 
 					video.datetime = date;
+				}
+				
+				if(renderer.badges && renderer.badges.length) {
+					for(badge of renderer.badges) {
+						if(badge?.metadataBadgeRenderer?.label == "AI") {
+							video.isAI = true;
+						}
+					}
 				}
 			},
 			videoSecondaryInfoRenderer(renderer) {
@@ -10838,26 +10967,26 @@ function decryptUrlN(url, jsUrl, doLogging, outObj) {
 }
 function decodeCipher(cipher, jsUrl) {
 	if(!_cipherDecode[jsUrl])
-		throw new ScriptException("Cipher decoder was not available [" + jsUrl + "]");
+		throw new ScriptException("Cipher decoder was not available [" + getJsUrlHash(jsUrl) + "]");
 	try {
 		return _cipherDecode[jsUrl](cipher);
 	}
 	catch(ex) {
 		log("decryptSig failed: " + ex);
 	    if(bridge.devSubmit) bridge.devSubmit("decryptSig - failed due to: " + ex, "//" + jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
-		throw new ScriptException("decryptSig - failed due to: " + ex + "\n" + jsUrl);
+		throw new ScriptException("decryptSig - failed due to: " + ex + "\n" + getJsUrlHash(jsUrl));
 	}
 }
 function decryptN(encryptedN, jsUrl) {
 	if(!_nDecrypt[jsUrl])
-		throw new ScriptException("N Decryptor was not available [" + jsUrl + "]");
+		throw new ScriptException("N Decryptor was not available [" + getJsUrlHash(jsUrl) + "]");
 	try {
 		return _nDecrypt[jsUrl](encryptedN);
 	}
 	catch(ex) {
 		log("decryptN failed: " + ex);
 	    if(bridge.devSubmit) bridge.devSubmit("decryptN - failed due to: " + ex, "//" + jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
-		throw new ScriptException("decryptN - failed due to: " + ex + "\n" + jsUrl);
+		throw new ScriptException("decryptN - failed due to: " + ex + "\n" + getJsUrlHash(jsUrl));
 	}
 }
 function testCipher(hash, codeOverride) {
@@ -10874,7 +11003,7 @@ function testCipher(hash, codeOverride) {
 
 		const codeRaw = playerCodeResp.body;
 		if (!codeRaw || codeRaw.length < 100)
-			throw new ScriptException("No player code found?\n" + jsUrl);
+			throw new ScriptException("No player code found?\n" + getJsUrlHash(jsUrl));
 
 		prepareCipher(jsUrl, codeRaw);
 
@@ -10976,7 +11105,7 @@ function prepareCipher(jsUrl, codeOverride) {
 		codeUsed = playerCode;
 
 		if(!playerCode || !playerCode.length || playerCode.length < 100)
-			throw new ScriptException("No player code found?\n" + jsUrl);
+			throw new ScriptException("No player code found?\n" + getJsUrlHash(jsUrl));
 
 		_jsUrlScripts[jsUrl] = playerCode;
 
@@ -11006,7 +11135,7 @@ function prepareCipher(jsUrl, codeOverride) {
 			throw ex;
 		}
         if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error:" + ex + "\nMake sure you have the latest Youtube plugin version.\n" + jsUrl, codeUsed ?? "No code fetched");
-		throw new ScriptException("Failed to get Cipher due to: " + ex + "\n" + jsUrl);
+		throw new ScriptException("Failed to get Cipher due to: " + ex + "\n" + getJsUrlHash(jsUrl));
 	}
 }
 function prepareCipherPlayer(jsUrl, codeUsed, codeRaw) {
@@ -11014,8 +11143,8 @@ function prepareCipherPlayer(jsUrl, codeUsed, codeRaw) {
 			//bridge.toast("Falling back to virtualized player");
 			log("Using Cipher Player!!!");
 			const playerVirt = getVirtualizedPlayer(jsUrl, codeUsed, undefined, undefined, codeRaw);
-			_cipherDecode[jsUrl] = playerVirt.decryptSig ?? function(){throw "Not implemented (decryptSig) for " + jsUrl; }
-			_nDecrypt[jsUrl] = playerVirt.decryptN ?? function(){throw "Not implemented (decryptN) for " + jsUrl; }
+			_cipherDecode[jsUrl] = playerVirt.decryptSig ?? function(){throw "Not implemented (decryptSig) for " + getJsUrlHash(jsUrl); }
+			_nDecrypt[jsUrl] = playerVirt.decryptN ?? function(){throw "Not implemented (decryptN) for " + getJsUrlHash(jsUrl); }
 
 			const stsMatch = codeUsed.match(STS_REGEX);
 			console.log("stsMatch: " + stsMatch);
@@ -11155,7 +11284,7 @@ source.getVirtualizedPlayer = function(hash, codeOverride, extracts, noDecrypts)
 	}
 	console.log("Javascript Url: " + URL_BASE + jsUrl);
 	let playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
-
+	_jsUrlScripts[jsUrl] = playerCode;
 
 	let constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
 	if (!constantsMatch) {
@@ -11207,11 +11336,11 @@ function findNDecryptorFunction(jsUrl, code, codeRaw) {
 		return nDecryptDescs[jsUrl];
 
 	if (!codeRaw)
-		throw new ScriptException("Remote n decryptor requires raw player code: " + jsUrl);
+		throw new ScriptException("Remote n decryptor requires raw player code: " + getJsUrlHash(jsUrl));
 
 	const solution = findRemoteSolution(jsUrl, codeRaw);
 	if (!(solution && solution.status === 1 && solution.solutionN))
-		throw new ScriptException("Remote n decryptor unavailable: " + jsUrl);
+		throw new ScriptException("Remote n decryptor unavailable: " + getJsUrlHash(jsUrl));
 
 	nDecryptDescs[jsUrl] = rewriteRemoteSolution(solution.solutionN);
 	return nDecryptDescs[jsUrl];
@@ -11249,9 +11378,6 @@ function rewriteRemoteSolution(solution) {
 	}
 }
 function findRemoteSolution(jsUrl, codeRaw) {
-	const jsUrlHashMatch = (/\/s\/player\/([a-zA-Z0-9]+)\//g).exec(jsUrl);
-	const jsUrlHash = (jsUrlHashMatch) ? jsUrlHashMatch[1] : jsUrl;
-
 	console.log("Using remote solver for " + jsUrl);
 	log("Using remote solver for " + jsUrl);
 
@@ -11260,7 +11386,7 @@ function findRemoteSolution(jsUrl, codeRaw) {
 		bridge.toast("Remote solution hash: " + md5Hash);
 	let solution = getRemoteSolution(md5Hash);
 	if(!solution)
-		throw new ScriptException("Failed to remote solve [" + jsUrlHash + "] no solution?");
+		throw new ScriptException("Failed to remote solve [" + md5Hash + "] no solution?");
 
 	if(solution.status == 99) {
 		log("Remote solver starting new job");
@@ -11274,8 +11400,8 @@ function findRemoteSolution(jsUrl, codeRaw) {
 			return solution;
 		case 2:
 			remoteSolutions[md5Hash] = undefined;
-			console.log("Failed to remote solve [" + jsUrlHash + "] cached: " + solution.error);
-			throw new ScriptException("Failed to remote solve [" + jsUrlHash + "] cached: " + solution.error);
+			console.log("Failed to remote solve [" + md5Hash + "] cached: " + solution.error);
+			throw new ScriptException("Failed to remote solve [" + md5Hash + "] cached: " + solution.error);
 		case 0:
 			for(let i = 0; i < 15; i++) {
 				log("Remote solver waiting..");
@@ -11287,23 +11413,20 @@ function findRemoteSolution(jsUrl, codeRaw) {
 						return newSolution;
 					case 2:
 						remoteSolutions[md5Hash] = undefined;
-						throw new ScriptException("Failed remote solver [" + jsUrlHash + "]:" + newSolution.error);
+						throw new ScriptException("Failed remote solver [" + md5Hash + "]:" + newSolution.error);
 					default:
 						continue;
 				}
 			}
-			console.log("Failed remote solver timed out [" + jsUrlHash + "]")
-			throw new ScriptException("Failed remote solver timed out [" + jsUrlHash + "]");
+			console.log("Failed remote solver timed out [" + md5Hash + "]")
+			throw new ScriptException("Failed remote solver timed out [" + md5Hash + "]");
 		default:
-			console.log("Failed remote solver invalid status code [" + jsUrlHash + "]")
-			throw new ScriptException("Failed remote solver invalid status code [" + jsUrlHash + "]");
+			console.log("Failed remote solver invalid status code [" + md5Hash + "]")
+			throw new ScriptException("Failed remote solver invalid status code [" + md5Hash + "]");
 	}
 }
 
 function startRemoteSolution(md5Hash, jsUrl, codeRaw) {
-	const jsUrlHashMatch = (/\/s\/player\/([a-zA-Z0-9]+)\//g).exec(jsUrl);
-	const jsUrlHash = (jsUrlHashMatch) ? jsUrlHashMatch[1] : jsUrl;
-
 	if(!!remoteSolutions[md5Hash] && remoteSolutions[md5Hash].status !== 0)
 		return remoteSolutions[md5Hash];
 	
@@ -11314,7 +11437,7 @@ function startRemoteSolution(md5Hash, jsUrl, codeRaw) {
 
 	if(jobResponse && jobResponse.isOk)
 		return JSON.parse(jobResponse.body);
-	throw new ScriptException("Failed to start remote solver [" + jsUrlHash + "] (" + jobResponse?.code + ")");
+	throw new ScriptException("Failed to start remote solver [" + md5Hash + "] (" + jobResponse?.code + ")");
 }
 function getFastCachedSolution(md5Hash) {
 	const response = http.GET(URL_SOLUTIONS + md5Hash, {}, false);
