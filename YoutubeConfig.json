@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 360,
+	"version": 361,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -442,6 +442,9 @@
 
 
 	"changelog": {
+		"361": [
+     		"Others: Add additional logging for certain issues"
+     	],
 		"360": [
      		"Fix: Live stream fix for some streams"
      	],

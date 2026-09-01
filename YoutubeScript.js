@@ -553,22 +553,43 @@ source.getHome = (initialDataOverride) => {
 		initialData = initialDataOverride;
 
 	let tabs = [];
-	tabs = extractPage_Tabs(initialData);
+	try {
+		tabs = extractPage_Tabs(initialData);
+	}
+	catch(ex) {
+		log("Failed to extract tabs");
+        if(bridge.devSubmit) bridge.devSubmit("getHome - Failed to extract tabs:" + ex?.message, (initialData) ? JSON.stringify(initialData) : "No initial data!");
+		throw ex;
+	}
 	if(tabs.length == 0) {
         if(bridge.devSubmit) bridge.devSubmit("getHome - No tabs found..", JSON.stringify(initialData));
 		throw new ScriptException("No tabs found..");
 	}
     if(tabs[0].videos.length > 0) {
-	    let pager = new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, true);
-		
-		if(initialDataOverride && initialDataOverride.responseContext)
-			pager.hasMore = false;
+		try {
+			let pager = new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, true);
+			
+			if(initialDataOverride && initialDataOverride.responseContext)
+				pager.hasMore = false;
 
-		return pager;
+			return pager;
+		}
+		catch(ex) {
+			log("Failed to parse RichGridPager");
+			if(bridge.devSubmit) bridge.devSubmit("getHome - Failed to parse RichGridPager:" + ex?.message, (initialData) ? JSON.stringify(initialData) : "No initial data!");
+			throw ex;
+		}
 	}
     else if(_settings?.fallback_home_trending) {
 		log("No results, fallback to trending.");
-        return source.getTrending();
+		try {
+			return source.getTrending();
+		}
+		catch(ex) {
+			log("Failed to getTrending");
+			if(bridge.devSubmit) bridge.devSubmit("getHome - Failed to get trending:" + ex?.message, (initialData) ? JSON.stringify(initialData) : "No initial data!");
+			throw ex;
+		}
 	}
 	else {
 		log("No results, not attempting trending.");
@@ -3434,189 +3455,197 @@ source.getPlaylist = function (url) {
 	const isShow = !!matchShow;
 
 	const initialData = requestInitialData(url, USE_MOBILE_PAGES && !isShow, true);
-	const contents = initialData.contents;
 
-	if(isShow)
-		return extractShow_Playlist(url, initialData);
+	try {
+		const contents = initialData.contents;
 
-	if(IS_TESTING)
-	    console.log("Initial data", initialData);
+		if(isShow)
+			return extractShow_Playlist(url, initialData);
 
-    const playlistHeaderRenderer1 = initialData?.header?.playlistHeaderRenderer;
-	const playlistHeaderRenderer2 = initialData?.header?.pageHeaderRenderer;
-	let author = undefined;
-	let title = undefined;
-	let videoCount = undefined;
-	let playlistId = (isShow) ? matchShow[1] : undefined;
-    if(playlistHeaderRenderer1) {
-		title = extractText_String(playlistHeaderRenderer1.title);
-		author = extractRuns_AuthorLink(playlistHeaderRenderer1?.ownerText?.runs);
-		videoCount = extractFirstNumber_Integer(extractText_String(playlistHeaderRenderer1?.numVideosText));
-		playlistId = playlistId ?? playlistHeaderRenderer1?.playlistId;
-    }
-	else if(playlistHeaderRenderer2) {
-		title = playlistHeaderRenderer2.pageTitle
+		if(IS_TESTING)
+			console.log("Initial data", initialData);
 
-		const actions = playlistHeaderRenderer2?.pageHeaderViewModel?.actions?.flexibleActionsViewModel?.actionsRows;
-		if(actions) {
-			for(let action of actions){
-				for(let subAction of action.actions) {
-					if(subAction.buttonViewModel?.onTap?.innertubeCommand?.watchEndpoint?.playlistId) {
-						playlistId = playlistId ?? subAction.buttonViewModel?.onTap?.innertubeCommand?.watchEndpoint?.playlistId;
+		const playlistHeaderRenderer1 = initialData?.header?.playlistHeaderRenderer;
+		const playlistHeaderRenderer2 = initialData?.header?.pageHeaderRenderer;
+		let author = undefined;
+		let title = undefined;
+		let videoCount = undefined;
+		let playlistId = (isShow) ? matchShow[1] : undefined;
+		if(playlistHeaderRenderer1) {
+			title = extractText_String(playlistHeaderRenderer1.title);
+			author = extractRuns_AuthorLink(playlistHeaderRenderer1?.ownerText?.runs);
+			videoCount = extractFirstNumber_Integer(extractText_String(playlistHeaderRenderer1?.numVideosText));
+			playlistId = playlistId ?? playlistHeaderRenderer1?.playlistId;
+		}
+		else if(playlistHeaderRenderer2) {
+			title = playlistHeaderRenderer2.pageTitle
+
+			const actions = playlistHeaderRenderer2?.pageHeaderViewModel?.actions?.flexibleActionsViewModel?.actionsRows;
+			if(actions) {
+				for(let action of actions){
+					for(let subAction of action.actions) {
+						if(subAction.buttonViewModel?.onTap?.innertubeCommand?.watchEndpoint?.playlistId) {
+							playlistId = playlistId ?? subAction.buttonViewModel?.onTap?.innertubeCommand?.watchEndpoint?.playlistId;
+						}
+						if(playlistId)
+							break;
 					}
 					if(playlistId)
 						break;
 				}
-				if(playlistId)
-					break;
 			}
-		}
 
-		const metaDataRows = playlistHeaderRenderer2?.content?.pageHeaderViewModel?.metadata?.contentMetadataViewModel?.metadataRows;
-		if(!metaDataRows)
-			throw new ScriptException("No playlist header found");
-			
-		for(let row of metaDataRows) {
-			if(row.metadataParts) {
-				for(let part of row.metadataParts) {
-					if(part.avatarStack?.avatarStackViewModel) {
-						let model = part.avatarStack?.avatarStackViewModel
-						let authorName = model?.text?.content?.trim();
-						let authorThumbnail = 
-							(model.avatars && model.avatars.length > 0) ?
-								model.avatars[0].avatarViewModel?.image?.sources[0].url :
-								undefined;
-						let authorId = 
-							(model.text.commandRuns && model.text.commandRuns.length > 0) ?
-								model.text.commandRuns[0].onTap?.innertubeCommand?.browseEndpoint?.browseId :
-								undefined;
-						let authorUrl = authorId ? URL_CHANNEL_BASE + authorId : undefined;
-						
-						author = new PlatformAuthorLink(new PlatformID(PLATFORM, null, config?.id, PLATFORM_CLAIMTYPE), authorName, authorUrl, authorThumbnail);
+			const metaDataRows = playlistHeaderRenderer2?.content?.pageHeaderViewModel?.metadata?.contentMetadataViewModel?.metadataRows;
+			if(!metaDataRows)
+				throw new ScriptException("No playlist header found");
+				
+			for(let row of metaDataRows) {
+				if(row.metadataParts) {
+					for(let part of row.metadataParts) {
+						if(part.avatarStack?.avatarStackViewModel) {
+							let model = part.avatarStack?.avatarStackViewModel
+							let authorName = model?.text?.content?.trim();
+							let authorThumbnail = 
+								(model.avatars && model.avatars.length > 0) ?
+									model.avatars[0].avatarViewModel?.image?.sources[0].url :
+									undefined;
+							let authorId = 
+								(model.text.commandRuns && model.text.commandRuns.length > 0) ?
+									model.text.commandRuns[0].onTap?.innertubeCommand?.browseEndpoint?.browseId :
+									undefined;
+							let authorUrl = authorId ? URL_CHANNEL_BASE + authorId : undefined;
 							
-						if(author)
-							break;
-					}
-					else if(part.text) {
-						const partText = part.text.content;
-						if(partText && !videoCount && /[0-9]+ videos?/.test(partText)) {
-							videoCount = extractFirstNumber_Integer(partText);
+							author = new PlatformAuthorLink(new PlatformID(PLATFORM, null, config?.id, PLATFORM_CLAIMTYPE), authorName, authorUrl, authorThumbnail);
+								
+							if(author)
+								break;
+						}
+						else if(part.text) {
+							const partText = part.text.content;
+							if(partText && !videoCount && /[0-9]+ videos?/.test(partText)) {
+								videoCount = extractFirstNumber_Integer(partText);
+							}
 						}
 					}
 				}
+				if(author && videoCount)
+					break;
 			}
-			if(author && videoCount)
-				break;
 		}
-	}
-	else 
-		throw new ScriptException("No playlist header found");
+		else 
+			throw new ScriptException("No playlist header found");
 
 
-	if(IS_TESTING)
-	    console.log("initialData", initialData);
+		if(IS_TESTING)
+			console.log("initialData", initialData);
 
-    const renderer = initialData?.contents?.singleColumnBrowseResultsRenderer ?? initialData?.contents?.twoColumnBrowseResultsRenderer;
-    if(renderer) {
-        if(!renderer.tabs) {
-            throw new ScriptException("No tabs found");
-            return null;
-        }
-        const tab = renderer.tabs[0];
-        const tabRenderer = tab.tabRenderer;
-        const playlistList = findRenderer(tab, "playlistVideoListRenderer");
-		const videos = [];
-		let videoPager = undefined;
-        if(playlistList && playlistList.contents) {
-            //throw new ScriptException("playlistVideoListRenderer not found");
-            //return null;
-		
-			let continuationToken = null;
-			for(let playlistRenderer of playlistList.contents) {
-				switchKey(playlistRenderer, {
-					playlistVideoRenderer(renderer) {
-						const video = extractPlaylistVideoRenderer_Video(renderer);
-						if(video)
-							videos.push(video);
-					},
-					continuationItemRenderer(continueRenderer) {
-						continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
-					}
-				});
+		const renderer = initialData?.contents?.singleColumnBrowseResultsRenderer ?? initialData?.contents?.twoColumnBrowseResultsRenderer;
+		if(renderer) {
+			if(!renderer.tabs) {
+				throw new ScriptException("No tabs found");
+				return null;
 			}
+			const tab = renderer.tabs[0];
+			const tabRenderer = tab.tabRenderer;
+			const playlistList = findRenderer(tab, "playlistVideoListRenderer");
+			const videos = [];
+			let videoPager = undefined;
+			if(playlistList && playlistList.contents) {
+				//throw new ScriptException("playlistVideoListRenderer not found");
+				//return null;
+			
+				let continuationToken = null;
+				for(let playlistRenderer of playlistList.contents) {
+					switchKey(playlistRenderer, {
+						playlistVideoRenderer(renderer) {
+							const video = extractPlaylistVideoRenderer_Video(renderer);
+							if(video)
+								videos.push(video);
+						},
+						continuationItemRenderer(continueRenderer) {
+							continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
+						}
+					});
+				}
 
-			//Fallback for old apps
-			if(!bridge.buildVersion || bridge.buildVersion < 245) {
-				log("Using legacy remote playlist (all videos first page)");
-				while (continuationToken) {
-					const newData = validateContinuation(()=>requestBrowse({
-						continuation: continuationToken
-					}, USE_MOBILE_PAGES, true));
+				//Fallback for old apps
+				if(!bridge.buildVersion || bridge.buildVersion < 245) {
+					log("Using legacy remote playlist (all videos first page)");
+					while (continuationToken) {
+						const newData = validateContinuation(()=>requestBrowse({
+							continuation: continuationToken
+						}, USE_MOBILE_PAGES, true));
 
-					if (newData.length < 1) {
-						break;
-					}
+						if (newData.length < 1) {
+							break;
+						}
 
-					continuationToken = null;
-					for(let playlistRenderer of newData) {
-						switchKey(playlistRenderer, {
-							playlistVideoRenderer(renderer) {
-								const video = extractPlaylistVideoRenderer_Video(renderer);
-								if(video)
-									videos.push(video);
-							},
-							continuationItemRenderer(continueRenderer) {
-								continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
-							}
-						});
+						continuationToken = null;
+						for(let playlistRenderer of newData) {
+							switchKey(playlistRenderer, {
+								playlistVideoRenderer(renderer) {
+									const video = extractPlaylistVideoRenderer_Video(renderer);
+									if(video)
+										videos.push(video);
+								},
+								continuationItemRenderer(continueRenderer) {
+									continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
+								}
+							});
+						}
 					}
 				}
-			}
-			videoPager = new PlaylistVideoPager(videos, continuationToken);
-		}
-		else {
-			const richGridRenderer = findRenderer(tab, "richGridRenderer");
-			if(richGridRenderer) {
-				const richGridShelves = extractRichGridRenderer_Shelves(richGridRenderer, {allowShorts: true, allowNoAuthor: true});
-				videoPager = new RichGridPager(richGridShelves, {}, USE_MOBILE_PAGES, true);
+				videoPager = new PlaylistVideoPager(videos, continuationToken);
 			}
 			else {
-				const sectionList = tab?.tabRenderer?.content?.sectionListRenderer;
-				if(sectionList?.contents) {
-					const result = extractSectionListRenderer_Sections(sectionList);
-					const continuationToken = result.continuation?.token ?? result.subContinuations?.[0];
-					if(result.videos.length > 0 || continuationToken)
-						videoPager = new PlaylistVideoPager(result.videos, continuationToken);
+				const richGridRenderer = findRenderer(tab, "richGridRenderer");
+				if(richGridRenderer) {
+					const richGridShelves = extractRichGridRenderer_Shelves(richGridRenderer, {allowShorts: true, allowNoAuthor: true});
+					videoPager = new RichGridPager(richGridShelves, {}, USE_MOBILE_PAGES, true);
 				}
-				if(!videoPager)
-					throw new ScriptException("No content found for playlist");
+				else {
+					const sectionList = tab?.tabRenderer?.content?.sectionListRenderer;
+					if(sectionList?.contents) {
+						const result = extractSectionListRenderer_Sections(sectionList);
+						const continuationToken = result.continuation?.token ?? result.subContinuations?.[0];
+						if(result.videos.length > 0 || continuationToken)
+							videoPager = new PlaylistVideoPager(result.videos, continuationToken);
+					}
+					if(!videoPager)
+						throw new ScriptException("No content found for playlist");
+				}
 			}
-		}
 
-		let thumbnail = null;
-		if(videos && videos.length > 0 && 
-			videos[0].thumbnails?.sources && 
-			videos[0].thumbnails.sources.length > 0)
-			thumbnail = videos[0].thumbnails.sources[videos[0].thumbnails.sources.length - 1].url;
+			let thumbnail = null;
+			if(videos && videos.length > 0 && 
+				videos[0].thumbnails?.sources && 
+				videos[0].thumbnails.sources.length > 0)
+				thumbnail = videos[0].thumbnails.sources[videos[0].thumbnails.sources.length - 1].url;
+				
+			if(!author && videos && videos.length > 0 && videos.filter(x=>x.author.url != videos[0].author.url).length == 0) {
+				//Assume author = video owner if all videos by same & author null
+				author = videos[0].author;
+			}
 			
-		if(!author && videos && videos.length > 0 && videos.filter(x=>x.author.url != videos[0].author.url).length == 0) {
-			//Assume author = video owner if all videos by same & author null
-			author = videos[0].author;
+			return new PlatformPlaylistDetails({
+				url: url,
+				id: new PlatformID(PLATFORM, playlistId, config.id),
+				author: author,
+				name: title,
+				thumbnail: thumbnail,
+				videoCount: videoCount,
+				contents: videoPager
+			});
 		}
-		
-        return new PlatformPlaylistDetails({
-            url: url,
-			id: new PlatformID(PLATFORM, playlistId, config.id),
-			author: author,
-            name: title,
-            thumbnail: thumbnail,
-            videoCount: videoCount,
-            contents: videoPager
-        });
-    }
-	else
-		throw new ScriptException("No playlist renderer found?");
-    return null;
+		else
+			throw new ScriptException("No playlist renderer found?");
+		return null;
+	}
+	catch(ex) {
+		log("Failed to getPlaylist");
+		if(bridge.devSubmit) bridge.devSubmit("getPlaylist - Failed getPlaylist for [" + url +"]: " + ex?.message, (initialData) ? JSON.stringify(initialData) : "No initial data!");
+		throw ex;
+	}
 };
 
 function extractShow_Playlist(url, initialData) {
