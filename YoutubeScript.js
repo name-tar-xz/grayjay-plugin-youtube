@@ -543,9 +543,9 @@ source.getHome = (initialDataOverride) => {
         _prefetchHomeUsed = true;
     }
     else if(bridge.isLoggedIn())
-        initialData = requestInitialData(URL_CONTEXT_M, USE_MOBILE_PAGES, true, "getHome");
+        initialData = requestInitialData(URL_CONTEXT_M, USE_MOBILE_PAGES, true, undefined, "getHome");
 	else
-		initialData = requestInitialData(URL_HOME, USE_MOBILE_PAGES, true, "getHome");
+		initialData = requestInitialData(URL_HOME, USE_MOBILE_PAGES, true, undefined, "getHome");
 	
 	if(!initialDataOverride && source.homeInitialData)
 		initialDataOverride = source.homeInitialData;
