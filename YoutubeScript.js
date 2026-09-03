@@ -543,9 +543,9 @@ source.getHome = (initialDataOverride) => {
         _prefetchHomeUsed = true;
     }
     else if(bridge.isLoggedIn())
-        initialData = requestInitialData(URL_CONTEXT_M, USE_MOBILE_PAGES, true);
+        initialData = requestInitialData(URL_CONTEXT_M, USE_MOBILE_PAGES, true, "getHome");
 	else
-		initialData = requestInitialData(URL_HOME, USE_MOBILE_PAGES, true);
+		initialData = requestInitialData(URL_HOME, USE_MOBILE_PAGES, true, "getHome");
 	
 	if(!initialDataOverride && source.homeInitialData)
 		initialDataOverride = source.homeInitialData;
@@ -7269,7 +7269,7 @@ function requestPage(url, headers, useAuth = false) {
 		return resp.body;
 	else throw new ScriptException("Failed to request page [" + resp.code + "]");
 }
-function requestInitialData(url, useMobile = false, useAuth = false, overrideHtml) {
+function requestInitialData(url, useMobile = false, useAuth = false, overrideHtml, devSubmitFailureName = undefined) {
 	let headers = {"Accept-Language": "en-US", "Cookie": "PREF=hl=en&gl=US" };
 	if(useMobile)
 		headers["User-Agent"] = USER_AGENT_TABLET;
@@ -7305,6 +7305,11 @@ function requestInitialData(url, useMobile = false, useAuth = false, overrideHtm
 		if(useAuth && html.length < 100000 && html.indexOf("accounts/answer/61416") > 0)
 			throw new ScriptLoginRequiredException("Cookies expired, please relog")
 		const initialData = getInitialData(html);
+
+
+		if(!overrideHtml && !initialData && devSubmitFailureName) {
+			if(bridge.devSubmit) bridge.devSubmit(devSubmitFailureName + " - Failed to get InitialData:" + ex?.message, (html) ? JSON.stringify(html) : "No html data!");
+		}
 		return initialData;
 	}
 	else throw new ScriptException("Failed to request page [" + resp.code + "]\n" + url + "\n");
