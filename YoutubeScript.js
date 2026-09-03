@@ -7308,7 +7308,7 @@ function requestInitialData(url, useMobile = false, useAuth = false, overrideHtm
 
 
 		if(!overrideHtml && !initialData && devSubmitFailureName) {
-			if(bridge.devSubmit) bridge.devSubmit(devSubmitFailureName + " - Failed to get InitialData:" + ex?.message, (html) ? JSON.stringify(html) : "No html data!");
+			if(bridge.devSubmit) bridge.devSubmit(devSubmitFailureName + " - Failed to get InitialData", (html) ? JSON.stringify(html) : "No html data!");
 		}
 		return initialData;
 	}
