@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 364,
+	"version": 365,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 
@@ -45,6 +45,13 @@
 	],
 
 	"settings": [
+		{
+			"variable": "useBrowseApi",
+			"name": "Use Browse API",
+			"description": "Use the Browse API instead of scraping pages.",
+			"type": "Boolean",
+			"default": "false"
+		},
 		{
 			"variable": "authChannels",
 			"name": "Use Login for Channels",
@@ -416,6 +423,9 @@
 	"primaryClaimFieldType": 1,
 
 	"changelog": {
+		"365": [
+			"Added option to use Browse API"
+		],
 		"364": [
      		"Fix: Various methods (getHome/getPlaylist/getChannel etc)"
      	],
