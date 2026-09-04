@@ -7205,8 +7205,9 @@ function requestNext(body, useAuth = false, useMobile = false) {
 	}
 	return JSON.parse(resp.body);
 }
+const USE_BROWSE_API = false;
 function useBrowseApi() {
-	return !!_settings?.useBrowseApi;
+	return USE_BROWSE_API;
 }
 function extractPlaylistIdFromUrl(url) {
 	const match = url.match(/[?&]list=([^&]+)/);
