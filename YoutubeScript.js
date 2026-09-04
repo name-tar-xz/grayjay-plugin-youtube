@@ -75,6 +75,7 @@ const REGEX_VIDEO_PLAYLIST_URL = new RegExp("https://(.*\\.)?youtube\\.com/playl
 const REGEX_VIDEO_SHOW_URL = new RegExp("https://(.*\\.)?youtube\\.com/show/([^?]*)");
 
 const REGEX_INITIAL_DATA = new RegExp("<script.*?var ytInitialData = (.*?);<\/script>");
+const REGEX_INITIAL_DATA2 = new RegExp("<script.*?id=\"yt-initial-data\".*?>({.*?)<\\/script>");
 const REGEX_INITIAL_PLAYER_DATA = new RegExp("<script.*?var ytInitialPlayerResponse = (.*?});");
 
 //TODO: Make this one more flexible/reliable. For now used as fallback if initial fails.
@@ -535,7 +536,7 @@ source.saveState = () => {
 source.homeInitialData = undefined;
 
 //Home
-source.getHome = (initialDataOverride) => {
+source.getHome = (initialDataOverride, customHtml) => {
     let initialData = null;
     if(!_prefetchHomeUsed && _prefetchHomeAuth != null) {
         log("Using pre-fetched Home Page")
@@ -7756,14 +7757,23 @@ function getInitialData(html, useAuth = false) {
 	const clientContext = getClientContext(useAuth);
 
 	try {
-	const match = html.match(REGEX_INITIAL_DATA);
+		let initialDataRaw = null;
+		let initialDataRawCleaned = null;
+		const match = html.match(REGEX_INITIAL_DATA);
 		if(match) {
-			const initialDataRaw = match[1]
-			const initialDataRawCleaned = match[1].startsWith("'") && match[1].endsWith("'") ?
+			initialDataRaw = match[1]
+			initialDataRawCleaned = match[1].startsWith("'") && match[1].endsWith("'") ?
 				decodeHexEncodedString(match[1].substring(1, match[1].length - 1))
 					//TODO: Find proper decoding strat
 					.replaceAll("\\\\\"", "\\\"") : 
 				match[1];
+		}
+		else {
+			const match2 = html.match(REGEX_INITIAL_DATA2);
+			initialDataRawCleaned = match2[1];
+		}
+		
+		if(initialDataRaw || initialDataRawCleaned) {
 			let initialData = null;
 			try{
 				initialData = JSON.parse(initialDataRawCleaned);
@@ -7772,11 +7782,17 @@ function getInitialData(html, useAuth = false) {
 				console.log("Failed to parse initial data: ", initialDataRawCleaned);
 				log("Attempting initial data parsing using eval");
 				try {
-					if(!!_settings["showVerboseToasts"])
-						bridge.toast("Attempting eval to resolve initial data");
-					initialData = JSON.parse(eval(initialDataRaw));
-					console.log("Succesful initial data using eval", initialData);
-				log("Successful initial data parsing using eval");
+					if(initialDataRaw) {
+						if(!!_settings["showVerboseToasts"])
+							bridge.toast("Attempting eval to resolve initial data");
+						initialData = JSON.parse(eval(initialDataRaw));
+						console.log("Succesful initial data using eval", initialData);
+						log("Successful initial data parsing using eval");
+					}
+					else {
+						if(!!_settings["showVerboseToasts"])
+							bridge.toast("Failed to resolve initial data");
+					}
 				}
 				catch(ex) {
 					log("Failed to resolve initial data");

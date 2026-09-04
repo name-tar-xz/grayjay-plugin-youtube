@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 363,
+	"version": 364,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 
@@ -416,6 +416,9 @@
 	"primaryClaimFieldType": 1,
 
 	"changelog": {
+		"364": [
+     		"Fix: Various methods (getHome/getPlaylist/getChannel etc)"
+     	],
 		"363": [
      		"Others: Fix parameter pass"
      	],
